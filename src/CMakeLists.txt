@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # set the project name
 project(bolo)
 
-find_package(Qt5 COMPONENTS Widgets REQUIRED)
+# set include_directories
+include_directories("include")
 
-# add the executable
-add_executable(bolo main.cc)
-target_link_libraries(bolo Qt5::Widgets)
+add_subdirectory(compress)
+add_subdirectory(tar)
+add_subdirectory(app)
