@@ -1,5 +1,4 @@
-#include <string.h>
-
+#include <string>
 #include <vector>
 
 #pragma once
