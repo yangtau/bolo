@@ -1,5 +1,8 @@
 #pragma once
 
 namespace bolo {
-class Buffer {};
+
+template <typename T, typename E>
+class Result {};
+
 };  // namespace bolo

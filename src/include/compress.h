@@ -4,8 +4,7 @@
 
 #pragma once
 
-namespace bolo_compress {
-class Compressor {
-  virtual std::optional<bolo_buffer::Buffer> Compress(const bolo_buffer::Buffer &buf);
-};
-};  // namespace bolo_compress
+namespace bolo {
+std::optional<Buffer> Compress(const Buffer &buf);
+std::optional<Buffer> Uncompress(const Buffer &buf);
+};  // namespace bolo
