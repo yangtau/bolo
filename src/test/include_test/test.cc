@@ -2,7 +2,7 @@
 
 #include <result.h>
 
-#include <catch.hpp>
+#include <catch.h>
 #include <string>
 
 using namespace bolo;
