@@ -10,36 +10,35 @@ template <typename T, typename E>
 class Result {
  public:
   static auto Ok(const T& t) { return Result(t); }
-  static auto Ok(T&& t) { return Result(std::move<T>(t)); }
+  static auto Ok(T&& t) { return Result(std::move(t)); }
   static auto Err(const E& e) { return Result(e); }
-  static auto Err(E&& e) { return Result(std::move<E>(e)); }
+  static auto Err(E&& e) { return Result(std::move(e)); }
   explicit operator bool() const { return std::holds_alternative<T>(result_); }
   T value() const { return std::get<T>(result_); }
   T value_or(T default_value) const { return *this ? std::get<T>(result_) : default_value; }
   E error() const { return std::get<E>(result_); }
 
+  // Function: T -> U
+  // Map: Function -> Result<U, E>
   template <typename Function>
   auto Map(Function fn) const -> Result<decltype(fn(T())), E> {
-    if (*this) {
-      return Result(fn(value()));
-    } else {
-      return Result(error());
-    }
+    return *this ? Ok(fn(value())) : Err(error());
   }
 
+  // Function: T -> U
+  // Map: Function -> U -> Result<U, E>
   template <typename Function>
-  auto MapOr(Function fn, decltype(fn(T())) default_value) const {
+  auto MapOr(Function fn, decltype(fn(T())) default_value) const -> Result<decltype(fn(T())), E> {
     using U = decltype(fn(T()));
-    if (*this) {
-      return Result(fn(value()));
-    } else {
-      return Result<U, E>(default_value);
-    }
+    return *this ? Result<U, E>::Ok(fn(value())) : Result<U, E>::Ok(default_value);
   }
 
+  // Function: T -> Result<U, E>
+  // >>=: Function -> Result<U, E>
   template <typename Function>
-  auto operator>>=(Function fn) const -> decltype(Map(fn)) {
-    return Map(fn);
+  auto operator>>=(Function fn) const -> decltype(fn(T())) {
+    using U = decltype(fn(T()));  // Result<U, E>
+    return *this ? fn((value())) : U::Err(error());
   }
 
  private:

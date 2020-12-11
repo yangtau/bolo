@@ -1,8 +1,8 @@
 #define CATCH_CONFIG_MAIN
 
+#include <catch.h>
 #include <result.h>
 
-#include <catch.h>
 #include <string>
 
 using namespace bolo;
@@ -27,10 +27,11 @@ TEST_CASE("Result", "test") {
   SECTION("value_or") { REQUIRE(r2.value_or(v) == v); }
   SECTION("error") { REQUIRE(r2.error() == err_msg); }
   SECTION("map") {
-    auto r = r1.Map(square) >>= square;
+    auto r = r1.Map(square).Map(square);
+    ;
     REQUIRE(r.value() == v * v * v * v);
 
-    auto r3 = (r2 >>= square);
+    auto r3 = r2.Map(square);
 
     REQUIRE(!r3);
     REQUIRE(r3.error() == err_msg);
@@ -42,5 +43,21 @@ TEST_CASE("Result", "test") {
     REQUIRE(static_cast<bool>(r));
 
     REQUIRE(r2.Map(square).MapOr(square, v).value() == v);
+  }
+
+  SECTION(">>=") {
+    auto fn = [](int a) -> Result<double, std::string> {
+      using R = Result<double, std::string>;
+      return a == 0 ? R::Err("get 0") : R::Ok(a * 3.0);
+    };
+
+    auto r = r1 >>= fn;
+    REQUIRE(static_cast<bool>(r));
+    REQUIRE(r.value() == v * 3.0);
+
+    auto r3 = Result<int, std::string>::Ok(0);
+    auto r4 = r3 >>= fn;
+    REQUIRE(!r4);
+    REQUIRE(r4.error() == "get 0");
   }
 }
