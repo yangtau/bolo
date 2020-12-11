@@ -1,10 +1,14 @@
-#include <optional>
-
-#include "buffer.h"
-
 #pragma once
 
-namespace bolo {
-std::optional<Buffer> Compress(const Buffer &buf);
-std::optional<Buffer> Uncompress(const Buffer &buf);
-};  // namespace bolo
+#include <istream>
+
+#include "result.h"
+
+namespace bolo_compress {
+enum class Scheme {
+  DEFLATE,
+};
+
+bolo::Maybe<std::iostream> Compress(std::iostream &buf, Scheme s);
+bolo::Maybe<std::iostream> Uncompress(std::iostream &buf, Scheme s);
+};  // namespace bolo_compress
