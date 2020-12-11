@@ -13,8 +13,8 @@ TEST_CASE("Result", "test") {
   auto square = [](int a) { return a * a; };
   auto div3 = [](int a) -> double { return a / 3.0; };
 
-  auto r1 = Result<int, std::string>::Ok(v);
-  auto r2 = Result<int, std::string>::Err(err_msg);
+  Result<int, std::string> r1 = Ok(v);
+  Result<int, std::string> r2 = Err(err_msg);
 
   SECTION("bool") {
     REQUIRE(static_cast<bool>(r1));
@@ -28,7 +28,6 @@ TEST_CASE("Result", "test") {
   SECTION("error") { REQUIRE(r2.error() == err_msg); }
   SECTION("map") {
     auto r = r1.Map(square).Map(square);
-    ;
     REQUIRE(r.value() == v * v * v * v);
 
     auto r3 = r2.Map(square);
@@ -47,17 +46,82 @@ TEST_CASE("Result", "test") {
 
   SECTION(">>=") {
     auto fn = [](int a) -> Result<double, std::string> {
-      using R = Result<double, std::string>;
-      return a == 0 ? R::Err("get 0") : R::Ok(a * 3.0);
+      if (a == 0)
+        return Err<std::string>("get 0");
+      else
+        return Ok(a * 3.0);
     };
 
     auto r = r1 >>= fn;
     REQUIRE(static_cast<bool>(r));
     REQUIRE(r.value() == v * 3.0);
 
-    auto r3 = Result<int, std::string>::Ok(0);
+    Result<int, std::string> r3 = Ok(0);
     auto r4 = r3 >>= fn;
     REQUIRE(!r4);
     REQUIRE(r4.error() == "get 0");
+  }
+
+  SECTION("|") {
+    REQUIRE((r1 | Ok(2)).value() == r1.value());
+    REQUIRE((r1 | Err<std::string>("")).value() == r1.value());
+
+    REQUIRE((r2 | Ok(2)).value() == 2);
+    REQUIRE((r2 | Err<std::string>("")).value_or(0) == 0);
+  }
+  SECTION("&") {
+    REQUIRE(!(r2 & Ok(2)));
+    REQUIRE((r2 & Err<std::string>("")).error() == err_msg);
+
+    REQUIRE((r1 & Ok(2)).value() == 2);
+    REQUIRE((r1 & Err<std::string>("")).value_or(0) == 0);
+  }
+
+  SECTION("==") {
+    REQUIRE(r1 == Ok(v));
+    REQUIRE(r2 == Err(err_msg));
+  }
+}
+
+TEST_CASE("Maybe", "test") {
+  Maybe<int> m1 = Just(2);
+  Maybe<int> m2 = Nothing;
+
+  SECTION("value") {
+    REQUIRE(static_cast<bool>(m1));
+    REQUIRE(m1.value() == 2);
+
+    REQUIRE(!m2);
+    REQUIRE(m2.value_or(2) == 2);
+  }
+
+  SECTION("map map_or") {
+    REQUIRE(m1.Map([](int a) { return a + 100; }).value() == 102);
+    REQUIRE(m2.Map([](int a) { return a + 100; }) == Nothing);
+
+    REQUIRE(m2.MapOr([](int a) { return a + 100; }, 100) == Just(100));
+    REQUIRE(m1.MapOr([](int a) { return a + 100; }, 100) == Just(102));
+  }
+
+  SECTION(">>=") {
+    auto div = [](int a) -> Maybe<int> {
+      if (a == 0) return Nothing;
+      return Just(a + 100);
+    };
+
+    REQUIRE((m1 >>= div) == Just(102));
+    REQUIRE((Just(0) >>= div) == Nothing);
+  }
+
+  SECTION("|&") {
+    REQUIRE((Just(20) | Nothing) == Just(20));
+    REQUIRE((Just(20) | Just(30)) == Just(20));
+    REQUIRE((Maybe<int>(Nothing) | Just(30)) == Just(30));
+    REQUIRE((Maybe<int>(Nothing) | Nothing) == Nothing);
+
+    REQUIRE((Just(20) & Just(30)) == Just(30));
+    REQUIRE((Maybe<int>(Nothing) & Just(30)) == Nothing);
+    REQUIRE((Just(30) & Nothing) == Nothing);
+    REQUIRE((Maybe<int>(Nothing) & Nothing) == Nothing);
   }
 }
