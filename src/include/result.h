@@ -148,16 +148,9 @@ class Maybe : private Either<T, details::nothing_t> {
   Maybe<T> operator&(const Maybe<T> &res) const { return *this ? res : *this; }
 };
 
-template <typename T>
-inline Maybe<T> Just(const T &t) {
-  return Maybe<T>(t);
+template <typename T, typename U = typename std::remove_reference<T>::type>
+inline Maybe<U> Just(T &&t) {
+  return Maybe<U>(std::forward<T>(t));
 }
-
-template <typename T>
-inline Maybe<T> Just(T &&t) {
-  return Maybe<T>(std::move(t));
-}
-
-;
 
 };  // namespace bolo
