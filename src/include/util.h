@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ctime>
+#include <chrono>
 
 #include "types.h"
 
@@ -12,5 +12,9 @@
   const type &var() const { return var##_; }
 
 namespace bolo {
-inline Timestamp GetTimestamp() { return static_cast<Timestamp>(std::time(NULL)); }
+inline Timestamp GetTimestamp() {
+  using namespace std::chrono;
+  auto now = high_resolution_clock::now();
+  return static_cast<Timestamp>(duration_cast<nanoseconds>(now.time_since_epoch()).count());
+}
 };  // namespace bolo

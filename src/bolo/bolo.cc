@@ -94,8 +94,7 @@ bool Bolo::UpdateConfig() {
   if (!f.is_open()) return false;
 
   f << config_.dump(4);
-
-  return static_cast<bool>(f);
+  return !!f;
 }
 
 };  // namespace bolo
