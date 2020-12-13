@@ -4,12 +4,11 @@
 #include <utility>
 
 #include "backup_file.h"
-#include "lib/jsonlib.h"
 #include "result.h"
+#include "types.h"
 #include "util.h"
 
 namespace bolo {
-using json = nlohmann::json;
 
 class Bolo {
  public:
@@ -17,7 +16,7 @@ class Bolo {
   //   path: json config 配置路径
   // Returns bolo: Result<Bolo> on success;
   // Return error massage: Result<std::string> on error
-  static Result<Bolo, std::string> LoadFromJsonFile(const std::string path);
+  static Result<Bolo, std::string> LoadFromJsonFile(const std::string &path);
 
   // 添加一个备份文件
   Result<BackupFile, std::string> Backup(const std::string &path, const std::string &backup_path,
@@ -35,7 +34,7 @@ class Bolo {
   }
 
  private:
-  template <typename ConfigPath, typename Json, typename BackupDir, typename BackupFileMap>
+  template <typename ConfigPath, typename Json, typename BackupFileMap>
   Bolo(ConfigPath &&config_path, Json &&config, BackupFileMap &&m, BackupFileId next_id)
       : config_file_path_(std::forward<ConfigPath>(config_path)),
         config_(std::forward<Json>(config)),
@@ -47,10 +46,9 @@ class Bolo {
   bool UpdateConfig();
   BackupFileId NextId() { return next_id_++; }
 
-  using BackupList = std::unordered_map<std::uint64_t, BackupFile>;
-  PropertyWithGetter(const std::string, config_file_path);  // 配置文件路径
-  PropertyWithGetter(json, config);                         // 配置
-  PropertyWithGetter(BackupList, backup_files);             // 备份文件列表
-  PropertyWithGetter(BackupFileId, next_id);                // 下一个备份文件 id
+  PropertyWithGetter(std::string, config_file_path);  // 配置文件路径
+  PropertyWithGetter(json, config);                   // 配置
+  PropertyWithGetter(BackupList, backup_files);       // 备份文件列表
+  PropertyWithGetter(BackupFileId, next_id);          // 下一个备份文件 id
 };
 };  // namespace bolo

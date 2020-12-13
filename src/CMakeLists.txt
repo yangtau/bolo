@@ -13,5 +13,6 @@ include_directories("include")
 
 add_subdirectory(compress)
 add_subdirectory(tar)
+add_subdirectory(bolo)
 add_subdirectory(app)
 add_subdirectory(test)
