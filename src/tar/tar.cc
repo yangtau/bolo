@@ -1,1 +1,233 @@
 #include "tar.h"
+
+#include <algorithm>
+#include <cstring>
+#include <iostream>
+#include <system_error>
+#include <type_traits>
+
+#include "result.h"
+
+namespace bolo_tar {
+
+using namespace bolo;
+using namespace std::string_literals;
+namespace fs = std::filesystem;
+
+Result<std::shared_ptr<Tar>, std::string> Tar::Open(const fs::path &path) {
+  std::fstream fs(path, std::ios_base::in | std::ios_base::app | std::ios_base::out);
+
+  if (!fs) return Err("failed to open "s + path.string());
+
+  return Ok(std::shared_ptr<Tar>(new Tar(std::move(fs))));
+}
+
+TarResult Tar::Write() {
+  fs_.flush();
+  if (!fs_) return Err("failed to flush"s);
+  return Ok(true);
+}
+
+namespace {
+/*
+    Field offset	Field size	Field
+    0	    100	File name
+    100	  8	File mode
+    108	  8	Owner's numeric user ID
+    116	  8	Group's numeric user ID
+    124	  12	File size in bytes (octal base)
+    136	  12	Last modification time in numeric Unix time format (octal)
+    148	  8	Checksum for header record
+    156	  1	Link indicator (file type)
+    157	  100	Name of linked file
+*/
+#pragma pack(push)
+#pragma pack(1)
+
+constexpr int FileAlignment = 512;
+struct TarHeader {
+  union {
+    char _[FileAlignment];
+    struct {
+      char filename[100] = {0};
+      char filemode[8] = {0};
+      char owner_id[8] = {0};
+      char group_id[8] = {0};
+      char file_size[12] = {0};               // octal base
+      char last_modification_time[12] = {0};  // octal
+      char checksum[8] = {0};
+      char filetype[1] = {0};  // '0': normal file, '1': hard link, '2': 	Symbolic link
+      char linked_file[100] = {0};
+    };
+  };
+
+  TarHeader() {}
+
+  static std::unique_ptr<TarHeader> CreateHeader(const std::string &filename, int file_size,
+                                                 fs::perms perms, fs::file_type type) {
+    auto size_s = std::to_string(file_size);
+    auto perms_s = std::to_string(static_cast<unsigned>(perms));
+    if (filename.length() + 1 > sizeof(TarHeader::filename)) return nullptr;
+    if (size_s.size() + 1 > sizeof(TarHeader::file_size)) return nullptr;
+    if (perms_s.size() + 1 > sizeof(TarHeader::filemode)) return nullptr;
+
+    auto header = std::make_unique<TarHeader>();
+    std::strncpy(header->file_size, size_s.c_str(), sizeof(TarHeader::file_size));
+    std::strncpy(header->filename, filename.c_str(), sizeof(TarHeader::filename));
+    std::strncpy(header->filemode, perms_s.c_str(), sizeof(TarHeader::filemode));
+    header->filetype[0] = '0';
+
+    return header;
+  }
+
+  std::string file_name() const { return filename; }
+
+  Maybe<fs::perms> perms() const {
+    try {
+      return Just(static_cast<fs::perms>(std::stoul(filemode)));
+    } catch (...) {
+      return Nothing;
+    }
+  }
+
+  Maybe<int> filesize() const {
+    try {
+      return Just(std::stoi(file_size));
+    } catch (...) {
+      return Nothing;
+    }
+  }
+};
+#pragma pack(pop)
+static_assert(sizeof(TarHeader) == FileAlignment, "tar header size");
+};  // namespace
+
+TarResult Tar::AppendFile(const std::filesystem::path &path, const fs::path &relative_dir) {
+  // header
+  auto header = TarHeader::CreateHeader(path.lexically_relative(relative_dir), fs::file_size(path),
+                                        fs::status(path).permissions(), fs::file_type::regular);
+  if (header == nullptr) return Err("failed to create file header"s);
+  fs_.write(reinterpret_cast<const char *>(header.get()), FileAlignment);
+
+  std::ifstream ifs(path);
+  if (!ifs) return Err("failed to open "s + path.string());
+
+  // Copy file content
+  while (ifs.good() && fs_.good()) {
+    char buf[FileAlignment] = {0};
+    ifs.read(buf, FileAlignment);
+    fs_.write(buf, FileAlignment);
+  }
+
+  if (!fs_.good()) return Err("failed to write to output file"s);
+  if (!ifs.eof()) return Err("failed to read from input file"s);
+
+  return Ok(true);
+}
+
+TarResult Tar::AppendDirectory(const std::filesystem::path &path, const fs::path &relative_dir) {
+  // directory header
+  auto header = TarHeader::CreateHeader(path.lexically_relative(relative_dir).string() + "/", 0,
+                                        fs::status(path).permissions(), fs::file_type::directory);
+  if (header == nullptr) return Err("failed to create file header"s);
+  fs_.write(reinterpret_cast<const char *>(header.get()), FileAlignment);
+
+  auto res =
+      fs_.good() ? TarResult(Ok(true)) : Err("failed to write directory header: "s + path.string());
+
+  for (auto &p : fs::directory_iterator(path)) {
+    if (!res) break;
+    res = AppendImpl(p, relative_dir);
+  }
+  return res;
+}
+
+TarResult Tar::AppendImpl(const fs::path &path, const fs::path &relative_dir) try {
+  if (!fs::exists(path)) return Err("file: `" + path.string() + "` does not exists"s);
+
+  if (fs::is_regular_file(path))
+    return AppendFile(path, relative_dir);
+  else if (fs::is_directory(path))
+    return AppendDirectory(path, relative_dir);
+  else
+    return Err("Unsupported file type: "s +
+               std::to_string(static_cast<unsigned>(fs::status(path).type())));
+} catch (const fs::filesystem_error &e) {
+  return Err(std::string(e.what()));
+}
+
+TarResult Tar::Append(const fs::path &path) { return AppendImpl(path, path.parent_path()); }
+
+Result<std::vector<Tar::TarFile>, std::string> Tar::List() {
+  std::vector<Tar::TarFile> files;
+
+  fs_.seekg(0);
+  while (fs_.good()) {
+    TarHeader header;
+    fs_.read(reinterpret_cast<char *>(&header), FileAlignment);
+    if (fs_.gcount() == 0 && fs_.eof()) break;
+
+    auto filename = header.file_name();
+    auto size = header.filesize();
+    if (!size) return Err("failed to extract size of `"s + filename + "` from tar header");
+    auto perms = header.perms();
+    if (!perms) return Err("failed to extract perms of `"s + filename + "` from tar header");
+    auto type = filename.back() == '/' ? fs::file_type::directory : fs::file_type::regular;
+
+    files.push_back(Tar::TarFile{filename, size.value(), perms.value(), type});
+
+    int off = (size.value() + FileAlignment - 1) / FileAlignment * FileAlignment;
+    fs_.seekg(off, std::ios_base::cur);
+  }
+  if (!fs_.eof()) return Err("failed to list tar"s);
+
+  return Ok(files);
+}
+
+TarResult Tar::Extract(const fs::path &path) {
+  fs_.seekg(0);
+
+  while (fs_.good()) {
+    TarHeader header;
+    fs_.read(reinterpret_cast<char *>(&header), FileAlignment);
+    if (fs_.gcount() == 0 && fs_.eof()) break;
+
+    auto filename = header.file_name();
+    auto size = header.filesize();
+    if (!size) return Err("failed to extract size of `"s + filename + "` from tar header");
+
+    auto perms = header.perms();
+    if (!perms) return Err("failed to extract perms of `"s + filename + "` from tar header");
+
+    if (filename.back() == '/') {
+      fs::create_directories(path / filename);
+    } else {
+      auto res = ExtractFile(path / filename, size.value());
+      if (!res) return res;
+    }
+
+    fs::permissions(path / filename, perms.value());
+  }
+
+  if (!fs_.eof()) return Err("failed to extract"s);
+  return Ok(true);
+}
+
+TarResult Tar::ExtractFile(const std::filesystem::path &path, int size) {
+  std::ofstream ofs(path);
+  if (!ofs) return Err("failed to open: "s + path.string());
+
+  while (size > 0 && ofs.good() && fs_.good()) {
+    char buf[FileAlignment] = {0};
+    fs_.read(buf, FileAlignment);
+    ofs.write(buf, std::min(size, FileAlignment));
+    size -= FileAlignment;
+  }
+
+  if (!ofs) return Err("failed to write to "s + path.string());
+  if (!fs_) return Err("failed to read from tar file"s);
+
+  return Ok(true);
+}
+
+};  // namespace bolo_tar

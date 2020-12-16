@@ -9,7 +9,6 @@ TEST_CASE("Result", "test") {
   int v{20};
   auto err_msg = std::string{"Unexpected Error"};
   auto square = [](int a) { return a * a; };
-  auto div3 = [](int a) -> double { return a / 3.0; };
 
   Result<int, std::string> r1 = Ok(v);
   Result<int, std::string> r2 = Err(err_msg);
