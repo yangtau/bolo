@@ -9,4 +9,4 @@ add_executable(app main.cc)
 
 target_link_libraries(app PUBLIC Qt5::Widgets 
                       bolo tar compress
-                      ${GUN_FS_LIB})
+                      ${GNU_FS_LIB})
