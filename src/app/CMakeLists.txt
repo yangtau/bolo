@@ -7,4 +7,6 @@ set(CMAKE_AUTOUIC ON)
 
 add_executable(app main.cc)
 
-target_link_libraries(app PUBLIC Qt5::Widgets  stdc++fs bolo tar compress)
+target_link_libraries(app PUBLIC Qt5::Widgets 
+                      bolo tar compress
+                      ${GUN_FS_LIB})

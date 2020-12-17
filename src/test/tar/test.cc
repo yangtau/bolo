@@ -121,7 +121,7 @@ TEST_CASE("Tar", "test") {
     if (!res) std::cerr << res.error() << std::endl;
     REQUIRE(!!res);
 
-    int cnt = 0;
+    size_t cnt = 0;
     for (auto &f : res.value()) {
       cnt++;
       REQUIRE(std::find(filenames.begin(), filenames.end(), f.filename) != filenames.end());
@@ -157,7 +157,7 @@ TEST_CASE("Tar", "test") {
     if (!res) std::cerr << res.error() << std::endl;
     REQUIRE(!!res);
 
-    int cnt = 0;
+    size_t cnt = 0;
     for (auto &f : res.value()) {
       cnt++;
       REQUIRE(std::find(filenames.begin(), filenames.end(), f.filename) != filenames.end());

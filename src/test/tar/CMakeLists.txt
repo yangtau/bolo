@@ -1,3 +1,3 @@
 add_executable(tar_test test.cc)
 
-target_link_libraries(tar_test tar  stdc++fs)
+target_link_libraries(tar_test tar ${GUN_FS_LIB})
