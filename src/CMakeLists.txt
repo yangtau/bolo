@@ -5,6 +5,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GUN")
+set(GUN_FS_LIB "stdc++fs")
+endif()
+
 # set the project name
 project(bolo)
 
