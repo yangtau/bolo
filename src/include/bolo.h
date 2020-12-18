@@ -56,9 +56,9 @@ class Bolo {
   BackupFileId NextId() { return next_id_++; }
 
   PropertyWithGetter(fs::path, config_file_path);  // 配置文件路径
-  PropertyWithGetter(fs::path, backup_dir);        // 备份文件夹路径
   PropertyWithGetter(json, config);                // 配置
   PropertyWithGetter(BackupList, backup_files);    // 备份文件列表
   PropertyWithGetter(BackupFileId, next_id);       // 下一个备份文件 id
+  PropertyWithGetter(fs::path, backup_dir);        // 备份文件夹路径
 };
 };  // namespace bolo
