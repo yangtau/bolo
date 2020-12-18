@@ -19,8 +19,8 @@ class Bolo {
   static Result<Bolo, std::string> LoadFromJsonFile(const std::string &path);
 
   // 添加一个备份文件
-  Result<BackupFile, std::string> Backup(const std::string &path, const std::string &backup_path,
-                                         bool is_compressed, bool is_encrypted);
+  Result<BackupFile, std::string> Backup(const std::string &path, bool is_compressed,
+                                         bool is_encrypted);
 
   // 删除一个备份文件
   Insidious<std::string> Remove(BackupFileId id);
@@ -51,6 +51,7 @@ class Bolo {
   BackupFileId NextId() { return next_id_++; }
 
   PropertyWithGetter(std::string, config_file_path);  // 配置文件路径
+  PropertyWithGetter(std::string, backup_path);       // 备份文件夹路径
   PropertyWithGetter(json, config);                   // 配置
   PropertyWithGetter(BackupList, backup_files);       // 备份文件列表
   PropertyWithGetter(BackupFileId, next_id);          // 下一个备份文件 id

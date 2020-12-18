@@ -42,7 +42,7 @@ struct Err {
 
 // Result
 template <typename T, typename E>
-class Result : private Either<Ok<T>, Err<E>> {
+class Result : public Either<Ok<T>, Err<E>> {
   using Ei = Either<Ok<T>, Err<E>>;
 
  public:
@@ -162,6 +162,8 @@ class Insidious : public Result<details::SafeType, E> {
   explicit Insidious(E &&e) : R{Err<E>{{std::move(e)}}} {}
   Insidious(details::SafeType) : R{Ok<details::SafeType>{Safe}} {}
   Insidious(Ok<details::SafeType>) : R{Ok<details::SafeType>{Safe}} {}
+
+  explicit operator bool() const { return this->HoldsRight(); }
 };
 
 template <typename T, typename U = typename std::remove_reference<T>::type>

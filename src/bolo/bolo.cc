@@ -23,23 +23,26 @@ Result<Bolo, std::string> Bolo::LoadFromJsonFile(const std::string &path) {
 
   BackupFileId next_id;
   BackupList list;
+  std::string backup_path;
 
   try {
     config.at("next_id").get_to(next_id);
     config.at("backup_list").get_to(list);
+    config.at("backup_path").get_to(list);
   } catch (const json::out_of_range &e) {
     return Err("json out_of_range: "s + e.what());
   } catch (const json::type_error &e) {
     return Err("json type_error: "s + e.what());
   }
 
+  // TODO: make backup_path dir
+
   return Ok(Bolo(path, config, list, next_id));
 }
 
-Result<BackupFile, std::string> Bolo::Backup(const std::string &path,
-                                             const std::string &backup_path, bool is_compressed,
+Result<BackupFile, std::string> Bolo::Backup(const std::string &path, bool is_compressed,
                                              bool is_encrypted) {
-  auto file = BackupFile{NextId(), path, backup_path, GetTimestamp(), is_compressed, is_encrypted};
+  auto file = BackupFile{NextId(), path, backup_path_, GetTimestamp(), is_compressed, is_encrypted};
 
   backup_files_[file.id] = file;
 
