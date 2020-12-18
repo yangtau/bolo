@@ -10,12 +10,14 @@
 #include <QPushButton>
 #include <QTextStream>
 #include <QUrl>
+#include <iostream>
 #include <iterator>
 #include <map>
 
 #include "itemdef.h"
 #include "itemdelegate.h"
 #include "listview.h"
+#include "util.h"
 
 MainWindow::MainWindow(std::unique_ptr<bolo::Bolo> &&bolo, QWidget *parent)
     : QMainWindow(parent), mybolo{std::move(bolo)} {
@@ -75,9 +77,13 @@ MainWindow::~MainWindow() {}
 
 void MainWindow::InitData() {
   for (auto &it : mybolo->backup_files()) {
+    ItemData my_itemdata;
+    my_itemdata.file_name = QString::fromStdString(it.second.filename);
+    my_itemdata.MyBackupFile = it.second;
+
     QStandardItem *item = new QStandardItem;
     item->setSizeHint(QSize(100, 110));
-    // item->setData(file_name, Qt::UserRole);
+    item->setData(QVariant::fromValue(my_itemdata), Qt::UserRole);
     standard_item_model->appendRow(item);
   }
 }
@@ -114,7 +120,7 @@ void MainWindow::Show_FileWindow() {
   }
 }
 
-void MainWindow::Add_NewFile(QString file_name) {
+void MainWindow::Add_NewFile(QString file_path) {
   QMessageBox set_box(QMessageBox::NoIcon, "选项", "", 0, NULL, Qt::Sheet);
   set_box.setStyleSheet("background-color:white");
 
@@ -137,12 +143,23 @@ void MainWindow::Add_NewFile(QString file_name) {
 
   bool is_compress = option_compress.checkState();
   bool is_encrypt = option_encrypt.checkState();
-  bool is_cloud = option_cloud.checkState();
+  // bool is_cloud = option_cloud.checkState();
 
   if (set_box.clickedButton() == option_ok) {
+    auto res = mybolo->Backup(file_path.toStdString(), is_compress, is_encrypt);
+
+    if (!res) {
+      std::cerr << res.error();
+      return;
+    }
+
+    ItemData my_itemdata;
+    my_itemdata.file_name = QString::fromStdString(res.value().filename);
+    my_itemdata.MyBackupFile = res.value();
+
     QStandardItem *item = new QStandardItem;
     item->setSizeHint(QSize(100, 110));
-    item->setData(file_name, Qt::UserRole);
+    item->setData(QVariant::fromValue(my_itemdata), Qt::UserRole);
     standard_item_model->appendRow(item);
   }
 
@@ -151,9 +168,17 @@ void MainWindow::Add_NewFile(QString file_name) {
 }
 
 void MainWindow::Show_FileDetail(const QModelIndex &index) {
-  QString file_name = (QString)(index.data(Qt::UserRole).toString());
-  // qDebug() << file_name;
-  QString detail = file_name + "\n" + file_name + "\n" + file_name;
+  QVariant variant = index.data(Qt::UserRole);
+  ItemData data = variant.value<ItemData>();
+
+  QString detail = "";
+  detail = detail + "备份文件：" + QString::fromStdString(data.MyBackupFile.filename) + "\n";
+  detail = detail + "初始目录：" + QString::fromStdString(data.MyBackupFile.path) + "\n";
+  detail = detail + "备份目录：" + QString::fromStdString(data.MyBackupFile.backup_path) + "\n";
+  detail = detail + "备份时间：" +
+           QString::fromStdString(bolo::TimestampToString(data.MyBackupFile.timestamp)) + "\n";
+  detail = detail + "是否压缩：" + (data.MyBackupFile.is_compressed ? "是" : "否") + "\n";
+  detail = detail + "是否加密：" + (data.MyBackupFile.is_encrypted ? "是" : "否") + "\n";
 
   QMessageBox file_detail(
       QMessageBox::NoIcon, "File Detail", detail,
@@ -168,14 +193,36 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
 
   int result = file_detail.exec();
   switch (result) {
-    case QMessageBox::Yes:
-      qDebug() << "Yes";
-      // close();
+    case QMessageBox::Reset: {
+      file_window.setWindowTitle("本地文件");
+      file_window.setAcceptMode(QFileDialog::AcceptOpen);
+      file_window.setViewMode(QFileDialog::List);
+      file_window.setFileMode(QFileDialog::Directory);
+
+      if (file_window.exec() == QFileDialog::Accepted) {
+        QStringList file_names = file_window.selectedFiles();
+        auto res = mybolo->Restore(data.MyBackupFile.id, file_names[0].toStdString());
+
+        if (res) std::cerr << res.error() << std::endl;
+      }
       break;
-    case QMessageBox::No:
-      qDebug() << "NO";
-      // close();
+    }
+    case QMessageBox::Save: {
+      auto res = mybolo->Update(data.MyBackupFile.id);
+      if (res) std::cerr << res.error() << std::endl;
       break;
+    }
+    case QMessageBox::Abort: {
+      auto res = mybolo->Remove(data.MyBackupFile.id);
+      if (res)
+        std::cerr << res.error() << std::endl;
+      else
+        list_view->model()->removeRow(index.row());
+      break;
+    }
+    case QMessageBox::Close:
+      file_detail.close();
+
     default:
       break;
   }

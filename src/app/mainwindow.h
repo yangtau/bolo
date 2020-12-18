@@ -38,7 +38,7 @@ class MainWindow : public QMainWindow {
 
  public slots:
   void Show_FileWindow();
-  void Add_NewFile(QString file_name);
+  void Add_NewFile(QString file_path);
   void Show_FileDetail(const QModelIndex &index);
 
  public:
