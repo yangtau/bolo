@@ -10,6 +10,10 @@
 
 namespace bolo_tar {
 
+/*
+ * Tar:
+ *   目前仅支持普通文件和文件夹
+ */
 class Tar {
  public:
   struct TarFile {
@@ -17,6 +21,7 @@ class Tar {
     int size;
     std::filesystem::perms perms;
     std::filesystem::file_type type;
+    // TODO: last modification time
   };
 
   static bolo::Result<std::shared_ptr<Tar>, std::string> Open(const std::filesystem::path &);

@@ -40,7 +40,7 @@ std::unordered_map<std::string, std::string> contents = {
     {"foo/a/t.txt", "hello world"},
     {"foo/a/s.txt", repeat("Haskell is the best programming language in the world!\n", 10)},
     {"foo/b/c/e/f/g/h.txt", repeat("Hello", 5)},
-    {"foo/d.txt", "java ruby..."},
+    {"foo/d.txt", repeat("Java is the best language", 50)},
     {"bar.txt", repeat("python cpp c go fsharp csharp javascript typescript", 4)},
 };
 
@@ -59,7 +59,7 @@ bool ReadString(const fs::path &p, std::string &res) {
 
 bool WriteString(const fs::path &p, const std::string &txt) {
   std::ofstream ofs(p);
-  ofs << txt << "\0";
+  ofs << txt;
   return !!ofs;
 }
 

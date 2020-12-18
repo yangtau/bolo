@@ -24,27 +24,27 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
 
   BackupFileId next_id;
   BackupList list;
-  std::string backup_dir;
+  fs::path backup_dir;
 
   try {
     config.at("next_id").get_to(next_id);
     config.at("backup_list").get_to(list);
-    config.at("backup_dir").get_to(backup_dir);
+    backup_dir = config.at("backup_dir").get<std::string>();
+    backup_dir = backup_dir.lexically_normal();
   } catch (const json::out_of_range &e) {
     return Err("json out_of_range: "s + e.what());
   } catch (const json::type_error &e) {
     return Err("json type_error: "s + e.what());
   }
 
+  fs::create_directories(backup_dir);
   // if backup_path exists
   if (fs::exists(backup_dir)) {
     // check if backup_path is a dir
     if (fs::status(backup_dir).type() != fs::file_type::directory)
-      return Err("the backup_path is not a directory: "s + backup_dir);
+      return Err("the backup_path is not a directory: "s + backup_dir.string());
   } else {
-    // the backup_path does not exist, create it
-    if (!fs::create_directories(backup_dir))
-      return Err("failed to create backup directory: "s + backup_dir);
+    return Err("failed to create backup directory: "s + backup_dir.string());
   }
   return Ok(std::unique_ptr<Bolo>(new Bolo(path, config, list, next_id, backup_dir)));
 }
@@ -58,14 +58,16 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
   auto backup_path = (backup_dir_ / (filename + std::to_string(id)));
 
   auto file = BackupFile{
-      NextId(), filename, path, backup_path, GetTimestamp(), is_compressed, is_encrypted,
+      id, filename, path, backup_path, GetTimestamp(), is_compressed, is_encrypted,
   };
 
   backup_files_[file.id] = file;
 
   auto ins = BackupImpl(file);
-  if (!ins) {
+  if (ins) {
     backup_files_.erase(file.id);
+    std::error_code err;
+    fs::remove(file.backup_path, err);
     return Err(ins.error());
   }
 
@@ -93,13 +95,7 @@ Insidious<std::string> Bolo::BackupImpl(const BackupFile &f) {
     }
   }
 
-  if (!UpdateConfig()) {
-    std::error_code err;
-    fs::remove(f.backup_path, err);
-    return Danger("failed to update config"s);
-  }
-
-  return Safe;
+  return UpdateConfig();
 }
 
 // 删除一个备份文件
@@ -122,18 +118,46 @@ Insidious<std::string> Bolo::Update(BackupFileId id) {
   if (backup_files_.find(id) == backup_files_.end())
     return Danger("No backup file with a BackupFileId of "s + std::to_string(id));
 
-  // TODO: update backup
-
   BackupFile &file = backup_files_[id];
   file.timestamp = GetTimestamp();
 
   return BackupImpl(file);
 }
 
+Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_dir) {
+  using bolo_tar::Tar;
+
+  if (!fs::exists(restore_dir)) return Danger("directory does not exist: "s + restore_dir.string());
+  if (!fs::is_directory(restore_dir))
+    return Danger("the restore_path should be a directory: "s + restore_dir.string());
+
+  if (backup_files_.find(id) == backup_files_.end())
+    return Danger("No backup file with a BackupFileId of "s + std::to_string(id));
+  const BackupFile &file = backup_files_[id];
+
+  if (!fs::exists(file.backup_path))
+    return Danger("backup file does not exist: "s + file.backup_path);
+  auto restore_path = restore_dir / file.filename;
+  if (fs::exists(restore_path))
+    return Danger("file `"s + file.filename + "` already exists in `" + restore_dir.string() + "`");
+
+  if (file.is_compressed) {
+    // TODO
+  }
+  if (file.is_encrypted) {
+  }
+
+  if (auto tar = Tar::Open(file.backup_path))
+    return tar.value()->Extract(restore_dir);
+  else
+    return Danger(tar.error());
+}
+
 Insidious<std::string> Bolo::UpdateConfig() {
   try {
     config_["next_id"] = next_id_;
     config_["backup_list"] = json(backup_files_);
+    config_["backup_dir"] = backup_dir_.string();
   } catch (const json::type_error &e) {
     return Danger("json type_error: "s + e.what());
   }

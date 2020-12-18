@@ -61,7 +61,7 @@ struct TarHeader {
     };
   };
 
-  TarHeader() {}
+  TarHeader() { std::memset(this, 0, sizeof(TarHeader)); }
 
   static std::unique_ptr<TarHeader> CreateHeader(const std::string &filename, int file_size,
                                                  fs::perms perms, fs::file_type type) {
@@ -199,7 +199,7 @@ Result<std::vector<Tar::TarFile>, std::string> Tar::List() {
   return Ok(files);
 }
 
-Insidious<std::string> Tar::Extract(const fs::path &path) {
+Insidious<std::string> Tar::Extract(const fs::path &dir) {
   // move to the begin of tar file
   fs_.seekg(0);
 
@@ -217,13 +217,13 @@ Insidious<std::string> Tar::Extract(const fs::path &path) {
     if (!perms) return Danger("failed to extract perms of `"s + filename + "` from tar header");
 
     if (header.file_type() == fs::file_type::directory) {
-      fs::create_directories(path / filename);
+      fs::create_directories(dir / filename);
     } else {
-      auto ins = ExtractFile(path / filename, size.value());
+      auto ins = ExtractFile(dir / filename, size.value());
       if (ins) return ins;
     }
 
-    fs::permissions(path / filename, perms.value());
+    fs::permissions(dir / filename, perms.value());
   }
 
   if (!fs_.eof()) return Danger("failed to extract"s);

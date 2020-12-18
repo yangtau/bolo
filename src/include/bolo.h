@@ -14,6 +14,9 @@ namespace fs = std::filesystem;
 
 class Bolo {
  public:
+  Bolo(const Bolo &) = delete;
+  Bolo(Bolo &&) = default;
+
   // Input:
   //   path: json config 配置路径
   // Returns bolo: Result<Bolo> on success;
