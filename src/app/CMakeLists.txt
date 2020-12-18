@@ -4,8 +4,10 @@ find_package(Qt5 COMPONENTS Widgets REQUIRED)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+set(QRC_FILE res.qrc)
 
-add_executable(app main.cc)
+qt5_add_resources(QRC ${QRC_FILE})
+add_executable(app main.cc mainwindow.cc itemdelegate.cc listview.cc ${QRC})
 
 target_link_libraries(app PUBLIC Qt5::Widgets 
                       bolo tar compress
