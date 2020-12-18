@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <iostream>
+#include <type_traits>
 
 #include "bolo.h"
 #include "mainwindow.h"
@@ -10,16 +11,12 @@ int main(int argc, char *argv[]) {
 
   auto res = bolo::Bolo::LoadFromJsonFile(argv[1]);
   if (res) {
-    auto mybolo = res.value();
-    MainWindow w;
-    w.mybolo = &mybolo;
+    MainWindow w(std::move(res.value()));
     w.setFixedSize(600, 600);
     w.show();
 
     return a.exec();
-  }
-
-  else {
+  } else {
     std::cerr << res.error();
     return 0;
   }

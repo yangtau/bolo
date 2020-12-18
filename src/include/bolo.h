@@ -18,7 +18,7 @@ class Bolo {
   //   path: json config 配置路径
   // Returns bolo: Result<Bolo> on success;
   // Return error massage: Result<std::string> on error
-  static Result<Bolo, std::string> LoadFromJsonFile(const fs::path &path);
+  static Result<std::unique_ptr<Bolo>, std::string> LoadFromJsonFile(const fs::path &path);
 
   // 添加一个备份文件
   Result<BackupFile, std::string> Backup(const fs::path &path, bool is_compressed,

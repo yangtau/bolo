@@ -9,7 +9,7 @@
 namespace bolo {
 using namespace std::string_literals;
 
-Result<Bolo, std::string> Bolo::LoadFromJsonFile(const fs::path &path) {
+Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path &path) {
   std::ifstream f(path);
   if (!f.is_open()) {
     return Err("failed to open " + path.string());
@@ -46,7 +46,7 @@ Result<Bolo, std::string> Bolo::LoadFromJsonFile(const fs::path &path) {
     if (!fs::create_directories(backup_dir))
       return Err("failed to create backup directory: "s + backup_dir);
   }
-  return Ok(Bolo(path, config, list, next_id, backup_dir));
+  return Ok(std::unique_ptr<Bolo>(new Bolo(path, config, list, next_id, backup_dir)));
 }
 
 Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compressed,

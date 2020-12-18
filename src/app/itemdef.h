@@ -5,12 +5,11 @@
 
 #include "bolo.h"
 
-struct ItemData
-{
-    QString file_name;
-    bolo::BackupFile MyBackupFile;
+struct ItemData {
+  QString file_name;
+  bolo::BackupFile MyBackupFile;
 };
 
 Q_DECLARE_METATYPE(ItemData)
 
-#endif // ITEMDEF_H
+#endif  // ITEMDEF_H

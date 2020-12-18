@@ -4,16 +4,15 @@
 #include <QListView>
 #include <QMouseEvent>
 
-class ListView : public QListView
-{
-    Q_OBJECT
+class ListView : public QListView {
+  Q_OBJECT
 
-public:
-    ListView(QWidget *parent = 0);
-    ~ListView();
+ public:
+  ListView(QWidget* parent = 0);
+  ~ListView();
 
-private:
-    void mousePressEvent(QMouseEvent* event);
+ private:
+  void mousePressEvent(QMouseEvent* event);
 };
 
-#endif // LISTVIEW_H
+#endif  // LISTVIEW_H
