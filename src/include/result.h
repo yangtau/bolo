@@ -23,6 +23,7 @@ class Either : private std::variant<T, U> {
   const U &right() const { return std::get<U>(*this); }
 };
 
+//-----------------------------------------------------------------------------
 // Ok
 template <typename T>
 struct Ok {
@@ -114,8 +115,8 @@ R operator>>(Result<T, E> &&res, Function fn) {
   return Err(res.error());
 }
 
+//-----------------------------------------------------------------------------
 // Nothing
-
 namespace details {
 class NothingType {};
 };  // namespace details
@@ -130,8 +131,8 @@ class Maybe : public Result<T, details::NothingType> {
  public:
   explicit Maybe(const T &t) : R{Ok{t}} {}
   explicit Maybe(T &&t) : R{Ok{(std::move(t))}} {}
-  Maybe(details::NothingType) : R{Err<details::NothingType>{Nothing}} {}
-  Maybe(Err<details::NothingType>) : R{Err<details::NothingType>{Nothing}} {}
+  Maybe(details::NothingType) : R{Err{Nothing}} {}
+  Maybe(Err<details::NothingType>) : R{Err{Nothing}} {}
 
   bool operator==(const Maybe<T> &m) const {
     if (m && *this) return m.value() == this->value();
@@ -142,6 +143,30 @@ class Maybe : public Result<T, details::NothingType> {
 template <typename T, typename U = typename std::remove_reference<T>::type>
 inline Maybe<U> Just(T &&t) {
   return Maybe<U>(std::forward<T>(t));
+}
+
+//-----------------------------------------------------------------------------
+// Safe
+namespace details {
+using SafeType = details::NothingType;
+};
+constexpr details::SafeType Safe;
+
+// Insidious
+template <typename E>
+class Insidious : public Result<details::SafeType, E> {
+  using R = Result<details::SafeType, E>;
+
+ public:
+  explicit Insidious(const E &e) : R{Err<E>{e}} {}
+  explicit Insidious(E &&e) : R{Err<E>{{std::move(e)}}} {}
+  Insidious(details::SafeType) : R{Ok<details::SafeType>{Safe}} {}
+  Insidious(Ok<details::SafeType>) : R{Ok<details::SafeType>{Safe}} {}
+};
+
+template <typename T, typename U = typename std::remove_reference<T>::type>
+inline Insidious<U> Danger(T &&t) {
+  return Insidious<U>(std::forward<T>(t));
 }
 
 };  // namespace bolo

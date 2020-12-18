@@ -22,10 +22,10 @@ Result<std::shared_ptr<Tar>, std::string> Tar::Open(const fs::path &path) {
   return Ok(std::shared_ptr<Tar>(new Tar(std::move(fs))));
 }
 
-TarResult Tar::Write() {
+Insidious<std::string> Tar::Write() {
   fs_.flush();
-  if (!fs_) return Err("failed to flush"s);
-  return Ok(true);
+  if (!fs_) return Danger("failed to flush"s);
+  return Safe;
 }
 
 namespace {
@@ -102,15 +102,16 @@ struct TarHeader {
 static_assert(sizeof(TarHeader) == FileAlignment, "tar header size");
 };  // namespace
 
-TarResult Tar::AppendFile(const std::filesystem::path &path, const fs::path &relative_dir) {
+Insidious<std::string> Tar::AppendFile(const std::filesystem::path &path,
+                                       const fs::path &relative_dir) {
   // header
   auto header = TarHeader::CreateHeader(path.lexically_relative(relative_dir), fs::file_size(path),
                                         fs::status(path).permissions(), fs::file_type::regular);
-  if (header == nullptr) return Err("failed to create file header"s);
+  if (header == nullptr) return Danger("failed to create file header"s);
   fs_.write(reinterpret_cast<const char *>(header.get()), FileAlignment);
 
   std::ifstream ifs(path);
-  if (!ifs) return Err("failed to open "s + path.string());
+  if (!ifs) return Danger("failed to open "s + path.string());
 
   // Copy file content
   while (ifs.good() && fs_.good()) {
@@ -119,21 +120,22 @@ TarResult Tar::AppendFile(const std::filesystem::path &path, const fs::path &rel
     fs_.write(buf, FileAlignment);
   }
 
-  if (!fs_.good()) return Err("failed to write to output file"s);
-  if (!ifs.eof()) return Err("failed to read from input file"s);
+  if (!fs_.good()) return Danger("failed to write to output file"s);
+  if (!ifs.eof()) return Danger("failed to read from input file"s);
 
-  return Ok(true);
+  return Safe;
 }
 
-TarResult Tar::AppendDirectory(const std::filesystem::path &path, const fs::path &relative_dir) {
+Insidious<std::string> Tar::AppendDirectory(const std::filesystem::path &path,
+                                            const fs::path &relative_dir) {
   // directory header
   auto header = TarHeader::CreateHeader(path.lexically_relative(relative_dir).string() + "/", 0,
                                         fs::status(path).permissions(), fs::file_type::directory);
-  if (header == nullptr) return Err("failed to create file header"s);
+  if (header == nullptr) return Danger("failed to create file header"s);
   fs_.write(reinterpret_cast<const char *>(header.get()), FileAlignment);
 
-  auto res =
-      fs_.good() ? TarResult(Ok(true)) : Err("failed to write directory header: "s + path.string());
+  auto res = fs_.good() ? Insidious<std::string>(Safe)
+                        : Danger("failed to write directory header: "s + path.string());
 
   for (auto &p : fs::directory_iterator(path)) {
     if (!res) break;
@@ -142,21 +144,23 @@ TarResult Tar::AppendDirectory(const std::filesystem::path &path, const fs::path
   return res;
 }
 
-TarResult Tar::AppendImpl(const fs::path &path, const fs::path &relative_dir) try {
-  if (!fs::exists(path)) return Err("file: `" + path.string() + "` does not exists"s);
+Insidious<std::string> Tar::AppendImpl(const fs::path &path, const fs::path &relative_dir) try {
+  if (!fs::exists(path)) return Danger("file: `" + path.string() + "` does not exists"s);
 
   if (fs::is_regular_file(path))
     return AppendFile(path, relative_dir);
   else if (fs::is_directory(path))
     return AppendDirectory(path, relative_dir);
   else
-    return Err("Unsupported file type: "s +
-               std::to_string(static_cast<unsigned>(fs::status(path).type())));
+    return Danger("Unsupported file type: "s +
+                  std::to_string(static_cast<unsigned>(fs::status(path).type())));
 } catch (const fs::filesystem_error &e) {
-  return Err(std::string(e.what()));
+  return Danger(std::string(e.what()));
 }
 
-TarResult Tar::Append(const fs::path &path) { return AppendImpl(path, path.parent_path()); }
+Insidious<std::string> Tar::Append(const fs::path &path) {
+  return AppendImpl(path, path.parent_path());
+}
 
 Result<std::vector<Tar::TarFile>, std::string> Tar::List() {
   std::vector<Tar::TarFile> files;
@@ -184,7 +188,7 @@ Result<std::vector<Tar::TarFile>, std::string> Tar::List() {
   return Ok(files);
 }
 
-TarResult Tar::Extract(const fs::path &path) {
+Insidious<std::string> Tar::Extract(const fs::path &path) {
   fs_.seekg(0);
 
   while (fs_.good()) {
@@ -194,10 +198,10 @@ TarResult Tar::Extract(const fs::path &path) {
 
     auto filename = header.file_name();
     auto size = header.filesize();
-    if (!size) return Err("failed to extract size of `"s + filename + "` from tar header");
+    if (!size) return Danger("failed to extract size of `"s + filename + "` from tar header");
 
     auto perms = header.perms();
-    if (!perms) return Err("failed to extract perms of `"s + filename + "` from tar header");
+    if (!perms) return Danger("failed to extract perms of `"s + filename + "` from tar header");
 
     if (filename.back() == '/') {
       fs::create_directories(path / filename);
@@ -209,13 +213,13 @@ TarResult Tar::Extract(const fs::path &path) {
     fs::permissions(path / filename, perms.value());
   }
 
-  if (!fs_.eof()) return Err("failed to extract"s);
-  return Ok(true);
+  if (!fs_.eof()) return Danger("failed to extract"s);
+  return Safe;
 }
 
-TarResult Tar::ExtractFile(const std::filesystem::path &path, int size) {
+Insidious<std::string> Tar::ExtractFile(const std::filesystem::path &path, int size) {
   std::ofstream ofs(path);
-  if (!ofs) return Err("failed to open: "s + path.string());
+  if (!ofs) return Danger("failed to open: "s + path.string());
 
   while (size > 0 && ofs.good() && fs_.good()) {
     char buf[FileAlignment] = {0};
@@ -224,10 +228,10 @@ TarResult Tar::ExtractFile(const std::filesystem::path &path, int size) {
     size -= FileAlignment;
   }
 
-  if (!ofs) return Err("failed to write to "s + path.string());
-  if (!fs_) return Err("failed to read from tar file"s);
+  if (!ofs) return Danger("failed to write to "s + path.string());
+  if (!fs_) return Danger("failed to read from tar file"s);
 
-  return Ok(true);
+  return Safe;
 }
 
 };  // namespace bolo_tar

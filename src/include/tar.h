@@ -10,9 +10,6 @@
 
 namespace bolo_tar {
 
-class Tar;
-using TarResult = bolo::Result<bool, std::string>;
-
 class Tar {
  public:
   struct TarFile {
@@ -27,19 +24,22 @@ class Tar {
   Tar(Tar &&t) : fs_(std::move(t.fs_)) {}
   Tar(const Tar &) = delete;
 
-  TarResult Write();
-  TarResult Append(const std::filesystem::path &);
+  bolo::Insidious<std::string> Write();
+  bolo::Insidious<std::string> Append(const std::filesystem::path &);
   bolo::Result<std::vector<TarFile>, std::string> List();
 
   // input path should be a directory
-  TarResult Extract(const std::filesystem::path &);
+  bolo::Insidious<std::string> Extract(const std::filesystem::path &);
 
  private:
   explicit Tar(std::fstream &&fs) : fs_(std::move(fs)) {}
-  TarResult AppendImpl(const std::filesystem::path &, const std::filesystem::path &);
-  TarResult AppendFile(const std::filesystem::path &, const std::filesystem::path &);
-  TarResult AppendDirectory(const std::filesystem::path &, const std::filesystem::path &);
-  TarResult ExtractFile(const std::filesystem::path &, int);
+  bolo::Insidious<std::string> AppendImpl(const std::filesystem::path &,
+                                          const std::filesystem::path &);
+  bolo::Insidious<std::string> AppendFile(const std::filesystem::path &,
+                                          const std::filesystem::path &);
+  bolo::Insidious<std::string> AppendDirectory(const std::filesystem::path &,
+                                               const std::filesystem::path &);
+  bolo::Insidious<std::string> ExtractFile(const std::filesystem::path &, int);
 
  private:
   std::fstream fs_;

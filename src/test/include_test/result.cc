@@ -106,7 +106,10 @@ TEST_CASE("Maybe", "test") {
     REQUIRE(m2.value_or(2) == 2);
   }
 
-  SECTION("|") {}
+  SECTION("|") {
+    auto m3 = m1 | plus100 | [](int a) { return a * a; };
+    REQUIRE(m3.value() == (plus100(m1.value())) * plus100(m1.value()));
+  }
 
   SECTION(">>") {
     auto div = [](int a) -> Maybe<int> {
