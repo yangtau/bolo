@@ -80,9 +80,7 @@ bool CreateTestFile() {
 }
 
 bool DeleteTestFile() {
-  for (auto it = filenames.rbegin(); it != filenames.rend(); it++) {
-    fs::remove(*it);
-  }
+  for (auto it = filenames.rbegin(); it != filenames.rend(); it++) fs::remove(*it);
 
   fs::current_path("..");
   fs::remove_all("tar_test_dir");
@@ -98,17 +96,17 @@ TEST_CASE("Tar", "test") {
   {
     // append
     auto r = Tar::Open("foo.tar");
-    REQUIRE(static_cast<bool>(r));
+    REQUIRE(!!r);
 
     auto tar = r.value();
 
     auto res = tar->Append("foo");
-    if (!res) std::cerr << res.error() << std::endl;
-    REQUIRE(static_cast<bool>(res));
+    if (res) std::cerr << res.error() << std::endl;
+    REQUIRE(!res);
 
     res = tar->Write();
-    if (!res) std::cerr << res.error() << std::endl;
-    REQUIRE(static_cast<bool>(res));
+    if (res) std::cerr << res.error() << std::endl;
+    REQUIRE(!res);
   }
 
   {
@@ -123,8 +121,8 @@ TEST_CASE("Tar", "test") {
 
     size_t cnt = 0;
     for (auto &f : res.value()) {
-      cnt++;
       REQUIRE(std::find(filenames.begin(), filenames.end(), f.filename) != filenames.end());
+      cnt++;
     }
 
     REQUIRE(cnt == filenames.size());
@@ -134,17 +132,17 @@ TEST_CASE("Tar", "test") {
   WriteString("bar.txt", contents["bar.txt"]);
   {
     auto r = Tar::Open("foo.tar");
-    REQUIRE(static_cast<bool>(r));
+    REQUIRE(!!(r));
 
     auto tar = r.value();
 
     auto res = tar->Append("../tar_test_dir/bar.txt");
-    if (!res) std::cerr << res.error() << std::endl;
-    REQUIRE(static_cast<bool>(res));
+    if (res) std::cerr << res.error() << std::endl;
+    REQUIRE(!(res));
 
     res = tar->Write();
-    if (!res) std::cerr << res.error() << std::endl;
-    REQUIRE(static_cast<bool>(res));
+    if (res) std::cerr << res.error() << std::endl;
+    REQUIRE(!res);
   }
 
   {
@@ -174,8 +172,8 @@ TEST_CASE("Tar", "test") {
     auto tar = r.value();
 
     auto res = tar->Extract("../untar_test_dir");
-    if (!res) std::cerr << res.error() << std::endl;
-    REQUIRE(!!res);
+    if (res) std::cerr << res.error() << std::endl;
+    REQUIRE(!res);
   }
 
   {

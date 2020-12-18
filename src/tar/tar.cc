@@ -56,7 +56,7 @@ struct TarHeader {
       char file_size[12] = {0};               // octal base
       char last_modification_time[12] = {0};  // octal
       char checksum[8] = {0};
-      char filetype[1] = {0};  // '0': normal file, '1': hard link, '2': 	Symbolic link
+      char filetype[1] = {0};  // '0': normal file, '1': otherwise
       char linked_file[100] = {0};
     };
   };
@@ -75,12 +75,16 @@ struct TarHeader {
     std::strncpy(header->file_size, size_s.c_str(), sizeof(TarHeader::file_size));
     std::strncpy(header->filename, filename.c_str(), sizeof(TarHeader::filename));
     std::strncpy(header->filemode, perms_s.c_str(), sizeof(TarHeader::filemode));
-    header->filetype[0] = '0';
+    header->filetype[0] = type == fs::file_type::regular ? '0' : '1';
 
     return header;
   }
 
   std::string file_name() const { return filename; }
+
+  fs::file_type file_type() const {
+    return filetype[0] == '0' ? fs::file_type::regular : fs::file_type::directory;
+  }
 
   Maybe<fs::perms> perms() const {
     try {
@@ -105,8 +109,9 @@ static_assert(sizeof(TarHeader) == FileAlignment, "tar header size");
 Insidious<std::string> Tar::AppendFile(const std::filesystem::path &path,
                                        const fs::path &relative_dir) {
   // header
-  auto header = TarHeader::CreateHeader(path.lexically_relative(relative_dir), fs::file_size(path),
-                                        fs::status(path).permissions(), fs::file_type::regular);
+  auto header =
+      TarHeader::CreateHeader(path.lexically_relative(relative_dir).string(), fs::file_size(path),
+                              fs::status(path).permissions(), fs::file_type::regular);
   if (header == nullptr) return Danger("failed to create file header"s);
   fs_.write(reinterpret_cast<const char *>(header.get()), FileAlignment);
 
@@ -117,6 +122,8 @@ Insidious<std::string> Tar::AppendFile(const std::filesystem::path &path,
   while (ifs.good() && fs_.good()) {
     char buf[FileAlignment] = {0};
     ifs.read(buf, FileAlignment);
+    if (ifs.gcount() == 0) break;
+
     fs_.write(buf, FileAlignment);
   }
 
@@ -134,17 +141,17 @@ Insidious<std::string> Tar::AppendDirectory(const std::filesystem::path &path,
   if (header == nullptr) return Danger("failed to create file header"s);
   fs_.write(reinterpret_cast<const char *>(header.get()), FileAlignment);
 
-  auto res = fs_.good() ? Insidious<std::string>(Safe)
+  auto ins = fs_.good() ? Insidious<std::string>(Safe)
                         : Danger("failed to write directory header: "s + path.string());
 
   for (auto &p : fs::directory_iterator(path)) {
-    if (!res) break;
-    res = AppendImpl(p, relative_dir);
+    if (ins) break;
+    ins = AppendImpl(p, relative_dir);
   }
-  return res;
+  return ins;
 }
 
-Insidious<std::string> Tar::AppendImpl(const fs::path &path, const fs::path &relative_dir) try {
+Insidious<std::string> Tar::AppendImpl(const fs::path &path, const fs::path &relative_dir) {
   if (!fs::exists(path)) return Danger("file: `" + path.string() + "` does not exists"s);
 
   if (fs::is_regular_file(path))
@@ -154,23 +161,26 @@ Insidious<std::string> Tar::AppendImpl(const fs::path &path, const fs::path &rel
   else
     return Danger("Unsupported file type: "s +
                   std::to_string(static_cast<unsigned>(fs::status(path).type())));
-} catch (const fs::filesystem_error &e) {
-  return Danger(std::string(e.what()));
 }
 
-Insidious<std::string> Tar::Append(const fs::path &path) {
+Insidious<std::string> Tar::Append(const fs::path &path) try {
   return AppendImpl(path, path.parent_path());
+} catch (const fs::filesystem_error &e) {
+  return Danger("filesystem: "s + e.what());
 }
 
 Result<std::vector<Tar::TarFile>, std::string> Tar::List() {
   std::vector<Tar::TarFile> files;
 
+  // move to begin of tar file
   fs_.seekg(0);
   while (fs_.good()) {
+    // try to read a tar header
     TarHeader header;
     fs_.read(reinterpret_cast<char *>(&header), FileAlignment);
     if (fs_.gcount() == 0 && fs_.eof()) break;
 
+    // get tar file info from header
     auto filename = header.file_name();
     auto size = header.filesize();
     if (!size) return Err("failed to extract size of `"s + filename + "` from tar header");
@@ -183,15 +193,18 @@ Result<std::vector<Tar::TarFile>, std::string> Tar::List() {
     int off = (size.value() + FileAlignment - 1) / FileAlignment * FileAlignment;
     fs_.seekg(off, std::ios_base::cur);
   }
+
   if (!fs_.eof()) return Err("failed to list tar"s);
 
   return Ok(files);
 }
 
 Insidious<std::string> Tar::Extract(const fs::path &path) {
+  // move to the begin of tar file
   fs_.seekg(0);
 
   while (fs_.good()) {
+    //  try to read a header
     TarHeader header;
     fs_.read(reinterpret_cast<char *>(&header), FileAlignment);
     if (fs_.gcount() == 0 && fs_.eof()) break;
@@ -203,11 +216,11 @@ Insidious<std::string> Tar::Extract(const fs::path &path) {
     auto perms = header.perms();
     if (!perms) return Danger("failed to extract perms of `"s + filename + "` from tar header");
 
-    if (filename.back() == '/') {
+    if (header.file_type() == fs::file_type::directory) {
       fs::create_directories(path / filename);
     } else {
-      auto res = ExtractFile(path / filename, size.value());
-      if (!res) return res;
+      auto ins = ExtractFile(path / filename, size.value());
+      if (ins) return ins;
     }
 
     fs::permissions(path / filename, perms.value());
