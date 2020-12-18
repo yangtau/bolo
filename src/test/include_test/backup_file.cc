@@ -4,7 +4,7 @@
 TEST_CASE("BackupFile", "json") {
   using namespace bolo;
 
-  BackupFile file{0, "/origin/path", "/backup/path", 10000000, true, true};
+  BackupFile file{0, "hello", "/origin/path", "/backup/path", 10000000, true, true};
 
   json j = json(file);
 
@@ -35,9 +35,9 @@ TEST_CASE("BackupFile", "json") {
 TEST_CASE("BackupList", "json") {
   using namespace bolo;
 
-  BackupFile f1{1, "/origin/path1", "/backup/path", 10000000, true, true};
-  BackupFile f2{2, "/origin/path2", "/backup/path", 20000000, true, false};
-  BackupFile f3{3, "/origin/path3", "/backup/path", 30000000, false, true};
+  BackupFile f1{1, "hello", "/origin/path1", "/backup/path", 10000000, true, true};
+  BackupFile f2{2, "hello", "/origin/path2", "/backup/path", 20000000, true, false};
+  BackupFile f3{3, "hello", "/origin/path3", "/backup/path", 30000000, false, true};
 
   BackupList list{
       {f1.id, f1},
