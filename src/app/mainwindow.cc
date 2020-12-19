@@ -54,7 +54,7 @@ MainWindow::MainWindow(std::unique_ptr<bolo::Bolo> &&bolo, QWidget *parent)
 
   // 设置进度条
   progressbar.setFixedSize(580, 30);
-  progressbar.setRange(0,50000);
+  progressbar.setRange(0, 50000);
   progressbar.setValue(50000);
 
   // 界面布局
@@ -101,12 +101,10 @@ void MainWindow::InitData() {
   }
 }
 
-void MainWindow::set_progressbar()
-{
+void MainWindow::set_progressbar() {
   // 控制虚拟进度条读条
   progressbar.setValue(0);
-  for(int i = 0; i <= 50000; i++)
-    progressbar.setValue(i);
+  for (int i = 0; i <= 50000; i++) progressbar.setValue(i);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event) {
@@ -173,7 +171,6 @@ void MainWindow::Add_NewFile(QString file_path) {
   // bool is_cloud = option_cloud.checkState();
 
   if (set_box.clickedButton() == option_ok) {
-
     // 虚拟进度条读条
     set_progressbar();
 
@@ -236,10 +233,9 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
     file_window.setViewMode(QFileDialog::List);
     file_window.setFileMode(QFileDialog::Directory);
 
-    if (file_window.exec() != QFileDialog::Accepted) 
+    if (file_window.exec() != QFileDialog::Accepted)
       file_window.close();
-    else
-    {
+    else {
       // 虚拟进度条读条
       set_progressbar();
 
@@ -248,7 +244,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
 
       // 输出错误信息
       if (res) std::cerr << res.error() << std::endl;
-    }   
+    }
   } else if (file_detail.clickedButton() == update_button) {
     // 更新备份
     // 虚拟进度条读条
