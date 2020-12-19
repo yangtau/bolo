@@ -11,14 +11,18 @@ int main(int argc, char *argv[]) {
     std::cerr << "Usage: " << argv[0] << " <config>" << std::endl;
     return 0;
   }
+  // 生成备份管理对象的智能指针
   auto res = bolo::Bolo::LoadFromJsonFile(argv[1]);
   if (res) {
+    // 生成成功
     MainWindow w(std::move(res.value()));
-    w.setFixedSize(600, 600);
+    w.setWindowTitle("Bolo");
+    w.setFixedSize(600, 640);
     w.show();
 
     return a.exec();
   } else {
+    // 生成失败，输出错误信息
     std::cerr << res.error();
     return 0;
   }

@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <memory>
+#include <QProgressBar>
 
 #include "bolo.h"
 #include "itemdelegate.h"
@@ -35,6 +36,9 @@ class MainWindow : public QMainWindow {
   QPushButton new_file;
   QLabel title;
   QFileDialog file_window;
+  QProgressBar progressbar;
+
+  void set_progressbar();
 
  public slots:
   void Show_FileWindow();
