@@ -1,1 +1,1 @@
-add_library(compress compress.cc)
+add_library(compress compress.cc huffman.cc)

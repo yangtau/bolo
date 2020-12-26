@@ -1,6 +1,7 @@
 #pragma once
 
 #include <istream>
+#include <string>
 
 #include "result.h"
 
@@ -9,6 +10,7 @@ enum class Scheme {
   DEFLATE,
 };
 
-bolo::Maybe<std::iostream> Compress(std::iostream &buf, Scheme s);
-bolo::Maybe<std::iostream> Uncompress(std::iostream &buf, Scheme s);
+// `in` and `out` should both be binary stream
+bolo::Insidious<std::string> Compress(std::istream &in, std::ostream &out, Scheme s);
+bolo::Insidious<std::string> Uncompress(std::istream &in, std::ostream &out, Scheme s);
 };  // namespace bolo_compress

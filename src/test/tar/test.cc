@@ -1,4 +1,3 @@
-#include <cstdlib>
 #define CATCH_CONFIG_MAIN
 #include <catch.h>
 
