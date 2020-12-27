@@ -55,13 +55,16 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
 Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compressed,
                                              bool is_encrypted) try {
   auto id = NextId();
-  std::string filename = path.filename();
+  // remove '/' in directory path
+  auto p = path.string().back() == '/' ? path.parent_path() : path;
+
+  std::string filename = p.lexically_relative(p.parent_path());
 
   // backup filename = filename + id
   auto backup_path = (backup_dir_ / (filename + std::to_string(id)));
 
   auto file = BackupFile{
-      id, filename, path, backup_path, GetTimestamp(), is_compressed, is_encrypted,
+      id, filename, p, backup_path, GetTimestamp(), is_compressed, is_encrypted,
   };
 
   backup_files_[file.id] = file;
