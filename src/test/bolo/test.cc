@@ -1,11 +1,12 @@
-#include <cstring>
-#include <iostream>
-#include <memory>
 #define CATCH_CONFIG_MAIN
 #include <catch.h>
+#include <test_util.h>
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <memory>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -16,24 +17,19 @@ namespace fs = std::filesystem;
 using namespace bolo;
 
 const auto config_path = "config.json";
+const auto test_dir = "__bolo_test__dir__";
 std::vector<std::tuple<std::string, bool, bool>> cases{
     {"hello/hello.txt", false, true},
     {"java.txt", true, true},
-    {"hello/a/python.txt", false, false},
-    {"path/ruby.txt", false, false},
+    {"hello/a/python.txt", true, false},
+    {"path/ruby.txt", true, false},
 };
 
-std::string repeat(std::string input, int cnt) {
-  std::string s;
-  while (cnt--) s += input;
-  return s;
-}
-
 std::unordered_map<std::string, std::string> content{
-    {"hello/hello.txt", repeat("你好世界, 真不戳!\n", 20)},
-    {"java.txt", repeat("Java is the best language", 50)},
+    {"hello/hello.txt", Repeat("你好世界, 真不戳!\n", 200)},
+    {"java.txt", Repeat("Java is the best language", 500)},
     {"hello/a/python.txt", ""},
-    {"path/ruby.txt", repeat("ruby ruby?", 10)},
+    {"path/ruby.txt", Repeat("ruby ruby?", 100)},
 
 };
 
@@ -48,8 +44,8 @@ bool CreateConfigFile(const std::string &content) {
 bool RemoveConfig() { return fs::remove(config_path); }
 
 bool CreateFiles() {
-  fs::create_directory("bolo_test_dir");
-  fs::current_path("bolo_test_dir");
+  fs::create_directory(test_dir);
+  fs::current_path(test_dir);
 
   for (auto &it : content) {
     fs::path path(it.first);
@@ -63,48 +59,9 @@ bool CreateFiles() {
   return true;
 }
 
-bool CompareFiles(const fs::path &a, const fs::path &b) {
-  if (fs::file_size(a) != fs::file_size(b)) {
-    std::cerr << "size of " << a << " is different from size of " << b << std::endl;
-    return false;
-  }
-  std::ifstream fa(a);
-  std::ifstream fb(b);
-
-  while (fa.good() && fb.good()) {
-    constexpr int len = 40;
-    char bufa[len] = {0};
-    char bufb[len] = {0};
-
-    fa.read(bufa, len);
-    fb.read(bufb, len);
-
-    if (std::memcmp(bufb, bufa, len) != 0) {
-      for (int i = 0; i < len; i++) {
-        std::cerr << "<" << std::hex << bufa[i] << "," << std::hex << bufb[i] << ">";
-      }
-      return false;
-    }
-  }
-
-  return fa.eof() && fb.eof();
-}
-
-bool ReadString(const fs::path &p, std::string &s) {
-  std::ifstream ifs(p);
-  while (ifs.good()) {
-    char buf[1024] = {0};
-    ifs.read(buf, 1024);
-
-    s += buf;
-  }
-
-  return ifs.eof();
-}
-
 void DeleteFiles() {
   fs::current_path("..");
-  fs::remove_all("bolo_test_dir");
+  fs::remove_all(test_dir);
 }
 
 TEST_CASE("Bolo-error", "error") {

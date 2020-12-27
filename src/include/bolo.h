@@ -55,7 +55,7 @@ class Bolo {
   // 更新配置文件:
   //     备份文件列表更新, 或者其他配置信息更新; 配置更新后, 必须将配置持久化成功后才返回 true
   Insidious<std::string> UpdateConfig();
-  Insidious<std::string> BackupImpl(const BackupFile &file);
+  Insidious<std::string> BackupImpl(BackupFile &file);
   BackupFileId NextId() { return next_id_++; }
 
   PropertyWithGetter(fs::path, config_file_path);  // 配置文件路径

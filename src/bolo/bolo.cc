@@ -3,13 +3,14 @@
 #include <fstream>
 #include <string>
 
+#include "compress.h"
 #include "tar.h"
 #include "util.h"
 
 namespace bolo {
 using namespace std::string_literals;
 
-Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path &path) {
+Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path &path) try {
   std::ifstream f(path);
   if (!f.is_open()) {
     return Err("failed to open " + path.string());
@@ -47,10 +48,12 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
     return Err("failed to create backup directory: "s + backup_dir.string());
   }
   return Ok(std::unique_ptr<Bolo>(new Bolo(path, config, list, next_id, backup_dir)));
+} catch (const fs::filesystem_error &e) {
+  return Err("filesystem error: "s + e.what());
 }
 
 Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compressed,
-                                             bool is_encrypted) {
+                                             bool is_encrypted) try {
   auto id = NextId();
   std::string filename = path.filename();
 
@@ -63,94 +66,139 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
 
   backup_files_[file.id] = file;
 
-  auto ins = BackupImpl(file);
-  if (ins) {
-    backup_files_.erase(file.id);
-    std::error_code err;
-    fs::remove(file.backup_path, err);
-    return Err(ins.error());
+  std::string err;
+  if (auto ins = BackupImpl(file)) {
+    err = ins.error();
+    goto clean;
+  }
+
+  if (auto ins = UpdateConfig()) {
+    err = ins.error();
+    goto clean;
   }
 
   return Ok(file);
+
+clean:
+  backup_files_.erase(file.id);
+  fs::remove(file.backup_path);
+  return Err(err);
+} catch (const fs::filesystem_error &e) {
+  return Err("filesystem error: "s + e.what());
 }
 
-Insidious<std::string> Bolo::BackupImpl(const BackupFile &f) {
-  {
-    using bolo_tar::Tar;
-    auto tar = Tar::Open(f.backup_path);
-    if (!tar) return Danger(tar.error());
-
-    auto res = tar.value()->Append(f.path);
-
-    if (res) {
-      backup_files_.erase(f.id);
-      return Danger("tar error: "s + res.error());
-    }
-
-    if (f.is_compressed) {
-      // TODO:
-    }
-    if (f.is_encrypted) {
-      // TODO:
-    }
+// `f` has already being inserted into config
+Insidious<std::string> Bolo::BackupImpl(BackupFile &f) {
+  auto temp = MakeTemp();
+  if (auto tar = bolo_tar::Tar::Open(temp)) {
+    if (auto res = tar.value()->Append(f.path)) return Danger("tar error: "s + res.error());
+  } else {
+    return Danger(tar.error());
   }
 
-  return UpdateConfig();
+  if (f.is_compressed) {
+    auto t = MakeTemp();
+    std::ifstream ifs(temp, std::ios_base::binary);
+    if (!ifs.good()) return Danger("failded to open "s + temp);
+    std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
+    if (!ofs.good()) return Danger("failded to open "s + t);
+
+    if (auto ins = bolo_compress::Compress(ifs, ofs, bolo_compress::Scheme::DEFLATE))
+      return Danger("compression error: "s + ins.error());
+
+    // update temp
+    temp = t;
+  }
+
+  if (f.is_encrypted) {
+    // TODO:
+  }
+
+  // rename temp
+  fs::rename(temp, f.backup_path);
+  return Safe;
 }
 
 // 删除一个备份文件
-Insidious<std::string> Bolo::Remove(BackupFileId id) {
+Insidious<std::string> Bolo::Remove(BackupFileId id) try {
   if (backup_files_.find(id) == backup_files_.end())
     return Danger("No backup file with a BackupFileId of "s + std::to_string(id));
 
   auto file = backup_files_[id];
 
-  std::error_code err;
-  fs::remove(file.backup_path, err);
+  fs::remove(file.backup_path);
 
   backup_files_.erase(id);
 
   return UpdateConfig();
+} catch (const fs::filesystem_error &e) {
+  return Danger("filesystem error: "s + e.what());
 }
 
 // 更新一个备份文件
-Insidious<std::string> Bolo::Update(BackupFileId id) {
+Insidious<std::string> Bolo::Update(BackupFileId id) try {
   if (backup_files_.find(id) == backup_files_.end())
     return Danger("No backup file with a BackupFileId of "s + std::to_string(id));
 
   BackupFile &file = backup_files_[id];
   file.timestamp = GetTimestamp();
 
-  return BackupImpl(file);
+  if (auto ins = BackupImpl(file)) return ins;
+
+  if (auto ins = UpdateConfig()) return ins;
+
+  return Safe;
+} catch (const fs::filesystem_error &e) {
+  return Danger("filesystem error: "s + e.what());
 }
 
-Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_dir) {
+Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_dir) try {
   using bolo_tar::Tar;
 
+  // check if the restore dir exists
   if (!fs::exists(restore_dir)) return Danger("directory does not exist: "s + restore_dir.string());
   if (!fs::is_directory(restore_dir))
     return Danger("the restore_path should be a directory: "s + restore_dir.string());
 
+  // check if the file id is right
   if (backup_files_.find(id) == backup_files_.end())
     return Danger("No backup file with a BackupFileId of "s + std::to_string(id));
   const BackupFile &file = backup_files_[id];
 
+  // check if the backup file exists
   if (!fs::exists(file.backup_path))
     return Danger("backup file does not exist: "s + file.backup_path);
+
+  // check is there is a conflict file in the restore_dir
   auto restore_path = restore_dir / file.filename;
   if (fs::exists(restore_path))
     return Danger("file `"s + file.filename + "` already exists in `" + restore_dir.string() + "`");
 
+  std::string temp = file.backup_path;
   if (file.is_compressed) {
-    // TODO
+    temp = MakeTemp();
+
+    std::ifstream ifs(file.backup_path, std::ios_base::binary);
+    if (!ifs.good()) return Danger("failded to open "s + file.backup_path);
+    std::ofstream ofs(temp, std::ios_base::binary | std::ios_base::trunc);
+    if (!ofs.good()) return Danger("failded to open "s + temp);
+
+    if (auto ins = bolo_compress::Uncompress(ifs, ofs, bolo_compress::Scheme::DEFLATE))
+      return Danger("compression error: "s + ins.error());
   }
+
   if (file.is_encrypted) {
   }
 
-  if (auto tar = Tar::Open(file.backup_path))
-    return tar.value()->Extract(restore_dir);
-  else
-    return Danger(tar.error());
+  if (auto tar = Tar::Open(temp)) {
+    if (auto res = tar.value()->Extract(restore_dir)) return Danger("tar error: "s + res.error());
+  } else {
+    return Danger("tar error: "s + tar.error());
+  }
+
+  return Safe;
+} catch (const fs::filesystem_error &e) {
+  return Danger("filesystem error: "s + e.what());
 }
 
 Insidious<std::string> Bolo::UpdateConfig() {

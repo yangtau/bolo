@@ -1,7 +1,10 @@
 #pragma once
 
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -33,6 +36,15 @@ inline std::string TimestampToString(Timestamp stamp) {
   std::stringstream ss;
   ss << std::put_time(std::localtime(&t), "%F %T");
   return ss.str();
+}
+
+inline std::string MakeTemp() {
+  auto dir = std::filesystem::temp_directory_path() / "bolo_XXXXXXXXX";
+  char buf[512];
+  std::strncpy(buf, dir.c_str(), sizeof(buf));
+
+  mktemp(buf);
+  return buf;
 }
 
 };  // namespace bolo
