@@ -1,6 +1,5 @@
 #include "huffman.h"
 
-#include <algorithm>
 #include <cassert>
 #include <queue>
 #include <sstream>
@@ -20,8 +19,9 @@ Insidious<std::string> Huffman::Compress() {
   else
     return Danger(weights_res.error());
 
-  WriteCodewords();
+  WriteHeader();
 
+  in_.clear();
   in_.seekg(0);
 
   while (in_.good() && out_.good()) {
@@ -34,34 +34,41 @@ Insidious<std::string> Huffman::Compress() {
     WriteBits(codewords_[v]);
   }
 
+  if (bit_buffer_.size() > 0) {
+    // write 7 false (让buffer 中剩下的bits组成一个完整的 byte 然后写下文件)
+    WriteBits({false, false, false, false, false, false, false});
+  }
+
   if (!out_.good()) return danger("out stream is not good"s);
   if (!in_.eof()) return danger("not end of input stream"s);
   return Safe;
 }
 
-Insidious<std::string> Huffman::Decompress() {
+Insidious<std::string> Huffman::Uncompress() {
   in_.seekg(0);
 
-  auto unmap_res = ReadUnMap();
+  auto unmap_res = ReadHeader();
   if (!unmap_res) return Danger(unmap_res.error());
 
   auto &unmap = unmap_res.value();
 
-  while (in_.good() && out_.good()) {
+  while (byte_number > 0 && out_.good()) {
     std::string bits;
-    while (in_.good()) {
+    while (bit_buffer_.size() > 0 || in_.good()) {
       char c = ReadBit() ? '1' : '0';
       bits.push_back(c);
       if (unmap.find(bits) != unmap.end()) {
         uint8_t u = unmap[bits];
         out_.write(reinterpret_cast<const char *>(&u), sizeof(uint8_t));
+        byte_number--;
         break;
       }
     }
+    if (!(bit_buffer_.size() > 0 || in_.good())) break;
   }
 
   if (!out_.good()) return danger("out stream is not good"s);
-  if (!in_.eof()) return danger("not end of input stream"s);
+  if (byte_number != 0) return danger("no more bytes can be extracted"s);
   return Safe;
 }
 
@@ -70,7 +77,7 @@ bool Huffman::ReadBit() {
     uint8_t v{0};
     in_.read(reinterpret_cast<char *>(&v), sizeof v);
 
-    for (int i = 0; i < 8; i++) bit_buffer_.push(static_cast<bool>((v >> i) & 0x1));
+    for (int i = 7; i >= 0; i--) bit_buffer_.push(static_cast<bool>((v >> i) & 0x1));
   }
 
   bool t = bit_buffer_.front();
@@ -81,9 +88,9 @@ bool Huffman::ReadBit() {
 void Huffman::WriteBits(const std::vector<bool> &bits) {
   for (bool b : bits) bit_buffer_.push(b);
 
-  while (bit_buffer_.size() > 8) {
+  while (bit_buffer_.size() >= 8) {
     uint8_t v{0};
-    for (int i = 7; i >= 0; i++) {
+    for (int i = 7; i >= 0; i--) {
       v |= static_cast<uint8_t>(bit_buffer_.front() << i);
       bit_buffer_.pop();
     }
@@ -100,6 +107,7 @@ Result<Huffman::Weights, std::string> Huffman::GetWeights() {
     if (in_.gcount() == 0) break;
     if (res.find(v) == res.end()) res[v] = 0;
     res[v]++;
+    byte_number++;
   }
 
   if (!in_.eof()) return err("not end of input stream"s);
@@ -144,8 +152,11 @@ void Huffman::GenCodewords(std::shared_ptr<Node> tree, std::vector<bool> bits) {
   if (tree->left == nullptr && tree->right == nullptr) codewords_[tree->val] = bits;
 }
 
-void Huffman::WriteCodewords() {
-  // write length of tuple
+void Huffman::WriteHeader() {
+  // write the total number of bytes
+  out_.write(reinterpret_cast<const char *>(&byte_number), sizeof(byte_number));
+
+  // write length of tuples
   int size = codewords_.size();
   out_.write(reinterpret_cast<const char *>(&size), sizeof(size));
 
@@ -158,16 +169,15 @@ void Huffman::WriteCodewords() {
     ss << '$';
     auto s = ss.str();
 
-    // TODO: delete me
-    std::cout << static_cast<char>(it.first) << ":";
-    std::cout << s << " ";
-    std::cout << "\n";
-
     out_.write(s.c_str(), s.size());
   }
 }
 
-Result<Huffman::BitStringUnMap, std::string> Huffman::ReadUnMap() {
+Result<Huffman::BitStringUnMap, std::string> Huffman::ReadHeader() {
+  // read the number of bytes
+  in_.read(reinterpret_cast<char *>(&byte_number), sizeof(byte_number));
+
+  // read the unmap size
   int size;
   in_.read(reinterpret_cast<char *>(&size), sizeof(size));
   if (in_.gcount() != sizeof(size)) return err("failed to read the size"s);

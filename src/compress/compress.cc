@@ -10,6 +10,6 @@ bolo::Insidious<std::string> Compress(std::istream &in, std::ostream &out, Schem
 
 bolo::Insidious<std::string> Uncompress(std::istream &in, std::ostream &out, Scheme s) {
   auto huffman = Huffman(in, out);
-  return huffman.Decompress();
+  return huffman.Uncompress();
 }
 };  // namespace bolo_compress

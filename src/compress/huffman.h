@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <memory>
 #include <queue>
 #include <string>
@@ -11,12 +10,14 @@
 
 namespace bolo_compress {
 using namespace bolo;
+
+// TODO(yangtau): split Huffman into compression and decompression
 class Huffman {
  public:
   Huffman(std::istream &in, std::ostream &out) : in_{in}, out_{out} {}
 
   Insidious<std::string> Compress();
-  Insidious<std::string> Decompress();
+  Insidious<std::string> Uncompress();
 
  private:
   using Weights = std::unordered_map<uint8_t, uint64_t>;
@@ -45,9 +46,9 @@ class Huffman {
   void GenCodewords(std::shared_ptr<Node> tree, std::vector<bool> bits = {});
 
   // write tuples (bits in string, uint8)
-  void WriteCodewords();
+  void WriteHeader();
   // read tuples (bits in string, uint8)
-  Result<BitStringUnMap, std::string> ReadUnMap();
+  Result<BitStringUnMap, std::string> ReadHeader();
 
   // bit reads and writes
   bool ReadBit();
@@ -56,6 +57,7 @@ class Huffman {
  private:
   std::istream &in_;
   std::ostream &out_;
+  int64_t byte_number = 0;  // the number of bytes of original file
 
   std::queue<bool> bit_buffer_;
   Codewords codewords_;
