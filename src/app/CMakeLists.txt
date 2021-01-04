@@ -9,6 +9,7 @@ set(QRC_FILE res.qrc)
 qt5_add_resources(QRC ${QRC_FILE})
 add_executable(app main.cc mainwindow.cc itemdelegate.cc listview.cc ${QRC})
 
-target_link_libraries(app PUBLIC Qt5::Widgets 
-                      bolo tar compress
+target_link_libraries(app PUBLIC
+                      Qt5::Widgets 
+                      bolo
                       ${GNU_FS_LIB})
