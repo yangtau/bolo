@@ -54,7 +54,8 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
 }
 
 Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compressed,
-                                             bool is_encrypted, const std::string &key) try {
+                                             bool is_encrypted, bool enable_cloud,
+                                             const std::string &key) try {
   auto id = NextId();
   // remove '/' in directory path
   auto p = path.string().back() == '/' ? path.parent_path() : path;
@@ -65,7 +66,7 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
   auto backup_path = (backup_dir_ / (filename + std::to_string(id)));
 
   auto file = BackupFile{
-      id, filename, p, backup_path, GetTimestamp(), is_compressed, is_encrypted,
+      id, filename, p, backup_path, GetTimestamp(), is_compressed, is_encrypted, enable_cloud,
   };
 
   backup_files_[file.id] = file;
@@ -128,6 +129,10 @@ Insidious<std::string> Bolo::BackupImpl(BackupFile &f, const std::string &key) {
 
     // update temp
     temp = t;
+  }
+
+  if (f.is_in_cloud) {
+    // TODO
   }
 
   // rename temp

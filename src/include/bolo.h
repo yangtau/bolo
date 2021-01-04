@@ -25,7 +25,8 @@ class Bolo {
 
   // 添加一个备份文件
   Result<BackupFile, std::string> Backup(const fs::path &path, bool is_compressed,
-                                         bool is_encrypted, const std::string &key = "");
+                                         bool is_encrypted, bool enable_cloud = false,
+                                         const std::string &key = "");
 
   // 删除一个备份文件
   Insidious<std::string> Remove(BackupFileId id);

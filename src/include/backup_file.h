@@ -14,6 +14,7 @@ struct BackupFile {
   Timestamp timestamp;      // 备份的时间
   bool is_compressed;       // 是否压缩
   bool is_encrypted;        // 是否加密
+  bool is_in_cloud;         // 是否云备份
 
   bool operator==(const BackupFile &f) const {
     return id == f.id && path == f.path && backup_path == f.backup_path &&
