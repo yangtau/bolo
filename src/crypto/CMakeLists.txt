@@ -4,5 +4,5 @@ find_package(OpenSSL REQUIRED)
 
 include_directories(${OPENSSL_INCLUDE_DIR})
 
-add_library(crypto crypto.cc)
+add_library(crypto STATIC crypto.cc)
 target_link_libraries(crypto OpenSSL::SSL OpenSSL::Crypto)

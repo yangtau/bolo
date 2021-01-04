@@ -4,6 +4,7 @@
 #include <string>
 
 #include "compress.h"
+#include "crypto.h"
 #include "tar.h"
 #include "util.h"
 
@@ -53,7 +54,7 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
 }
 
 Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compressed,
-                                             bool is_encrypted) try {
+                                             bool is_encrypted, const std::string &key) try {
   auto id = NextId();
   // remove '/' in directory path
   auto p = path.string().back() == '/' ? path.parent_path() : path;
@@ -70,7 +71,7 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
   backup_files_[file.id] = file;
 
   std::string err;
-  if (auto ins = BackupImpl(file)) {
+  if (auto ins = BackupImpl(file, key)) {
     err = ins.error();
     goto clean;
   }
@@ -91,7 +92,7 @@ clean:
 }
 
 // `f` has already being inserted into config
-Insidious<std::string> Bolo::BackupImpl(BackupFile &f) {
+Insidious<std::string> Bolo::BackupImpl(BackupFile &f, const std::string &key) {
   auto temp = MakeTemp();
   if (auto tar = bolo_tar::Tar::Open(temp)) {
     if (auto res = tar.value()->Append(f.path)) return Danger("tar error: "s + res.error());
@@ -114,7 +115,19 @@ Insidious<std::string> Bolo::BackupImpl(BackupFile &f) {
   }
 
   if (f.is_encrypted) {
-    // TODO:
+    if (key == "") return Danger("the file is encrypted, but the key is empty"s);
+
+    auto t = MakeTemp();
+    std::ifstream ifs(temp, std::ios_base::binary);
+    if (!ifs.good()) return Danger("failded to open "s + temp);
+    std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
+    if (!ofs.good()) return Danger("failded to open "s + t);
+
+    if (auto ins = bolo_crypto::Encrypt(ifs, ofs, key))
+      return Danger("encrypt error: "s + ins.error());
+
+    // update temp
+    temp = t;
   }
 
   // rename temp
@@ -139,23 +152,27 @@ Insidious<std::string> Bolo::Remove(BackupFileId id) try {
 }
 
 // 更新一个备份文件
-Insidious<std::string> Bolo::Update(BackupFileId id) try {
+Insidious<std::string> Bolo::Update(BackupFileId id, const std::string &key) try {
   if (backup_files_.find(id) == backup_files_.end())
     return Danger("No backup file with a BackupFileId of "s + std::to_string(id));
 
   BackupFile &file = backup_files_[id];
-  file.timestamp = GetTimestamp();
 
-  if (auto ins = BackupImpl(file)) return ins;
+  if (file.is_encrypted && key == "") return Danger("the file is encrypted, but the key is empty"s);
+
+  if (auto ins = BackupImpl(file, key)) return ins;
 
   if (auto ins = UpdateConfig()) return ins;
 
+  // update timestamp
+  file.timestamp = GetTimestamp();
   return Safe;
 } catch (const fs::filesystem_error &e) {
   return Danger("filesystem error: "s + e.what());
 }
 
-Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_dir) try {
+Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_dir,
+                                     const std::string &key) try {
   using bolo_tar::Tar;
 
   // check if the restore dir exists
@@ -177,20 +194,36 @@ Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_di
   if (fs::exists(restore_path))
     return Danger("file `"s + file.filename + "` already exists in `" + restore_dir.string() + "`");
 
-  std::string temp = file.backup_path;
-  if (file.is_compressed) {
-    temp = MakeTemp();
+  if (file.is_encrypted && key == "") return Danger("the file is encrypted, but the key is empty"s);
 
-    std::ifstream ifs(file.backup_path, std::ios_base::binary);
+  std::string temp = file.backup_path;
+
+  if (file.is_encrypted) {
+    auto t = MakeTemp();
+
+    std::ifstream ifs(temp, std::ios_base::binary);
     if (!ifs.good()) return Danger("failded to open "s + file.backup_path);
-    std::ofstream ofs(temp, std::ios_base::binary | std::ios_base::trunc);
+    std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
+    if (!ofs.good()) return Danger("failded to open "s + temp);
+
+    if (auto ins = bolo_crypto::Decrypt(ifs, ofs, key))
+      return Danger("decrypto error: "s + ins.error());
+
+    temp = t;
+  }
+
+  if (file.is_compressed) {
+    auto t = MakeTemp();
+
+    std::ifstream ifs(temp, std::ios_base::binary);
+    if (!ifs.good()) return Danger("failded to open "s + file.backup_path);
+    std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
     if (!ofs.good()) return Danger("failded to open "s + temp);
 
     if (auto ins = bolo_compress::Uncompress(ifs, ofs, bolo_compress::Scheme::DEFLATE))
       return Danger("compression error: "s + ins.error());
-  }
 
-  if (file.is_encrypted) {
+    temp = t;
   }
 
   if (auto tar = Tar::Open(temp)) {
