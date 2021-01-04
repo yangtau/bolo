@@ -189,13 +189,14 @@ Result<Huffman::BitStringUnMap, std::string> Huffman::ReadHeader() {
     in_.read(reinterpret_cast<char *>(&v), sizeof v);
 
     std::stringstream ss;
-    while (true) {
+    while (true && in_.good()) {
       char c;
       in_.read(&c, sizeof c);
       if (c == '$') break;
 
       ss << c;
     }
+    if (!in_.good()) return err("failed to read unmap"s);
 
     unmap[ss.str()] = v;
   }
