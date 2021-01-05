@@ -198,7 +198,8 @@ void MainWindow::Add_NewFile(QString file_path) {
                             password_window.password.text().toStdString());
 
   if (!res) {
-    std::cerr << res.error();
+    QMessageBox::critical(NULL, "错误", QString::fromStdString(res.error()), QMessageBox::Yes,
+                          QMessageBox::Yes);
     return;
   }
 
@@ -222,7 +223,10 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
   QVariant variant = index.data(Qt::UserRole);
   ItemData data = variant.value<ItemData>();
   auto file = mybolo->GetBackupFile(data.id);
-  if (!file) return;
+  if (!file) {
+    QMessageBox::critical(NULL, "错误", "无法读取文件信息", QMessageBox::Yes, QMessageBox::Yes);
+    return;
+  }
   auto open_backupfile = file.value();
 
   // set the detail text
@@ -277,7 +281,9 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
       password_window.password.setText("");
 
       // 输出错误信息
-      if (res) std::cerr << res.error() << std::endl;
+      if (res)
+        QMessageBox::critical(NULL, "错误", QString::fromStdString(res.error()), QMessageBox::Yes,
+                              QMessageBox::Yes);
     }
   } else if (file_detail.clickedButton() == update_button) {
     // 更新备份
@@ -294,7 +300,9 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
     password_window.password.setText("");
 
     // 输出错误信息
-    if (res) std::cerr << res.error() << std::endl;
+    if (res)
+      QMessageBox::critical(NULL, "错误", QString::fromStdString(res.error()), QMessageBox::Yes,
+                            QMessageBox::Yes);
   } else if (file_detail.clickedButton() == delete_button) {
     // 删除备份
     // 进行确认选项，允许用户错误点击
@@ -309,7 +317,8 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
       auto res = mybolo->Remove(open_backupfile.id);
       if (res)
         // 输出错误信息
-        std::cerr << res.error() << std::endl;
+        QMessageBox::critical(NULL, "错误", QString::fromStdString(res.error()), QMessageBox::Yes,
+                              QMessageBox::Yes);
       else
         // 结构中删除对应数据
         list_view->model()->removeRow(index.row());
