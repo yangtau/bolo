@@ -6,10 +6,15 @@
 #include <ctime>
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
 
 #include "types.h"
+
+#ifndef DEBUG_LEVEL
+#define DEBUG_LEVEL LogLevel::Debug
+#endif
 
 #define PropertyWithGetter(type, var) \
  private:                             \
@@ -39,12 +44,22 @@ inline std::string TimestampToString(Timestamp stamp) {
 }
 
 inline std::string MakeTemp() {
-  auto dir = std::filesystem::temp_directory_path() / "bolo_XXXXXXXXX";
-  char buf[512];
-  std::strncpy(buf, dir.c_str(), sizeof(buf));
+  using namespace std::string_literals;
+  static int temp_id = 0;
+  auto path = std::filesystem::temp_directory_path() / ("bolo_num_"s + std::to_string(temp_id++));
+  return path.string();
+}
 
-  mktemp(buf);
-  return buf;
+enum class LogLevel : uint8_t {
+  None,
+  Info,
+  Warning,
+  Error,
+  Debug,
+};
+
+inline void Log(LogLevel level, const std::string &s) {
+  if (level <= DEBUG_LEVEL) std::cerr << s << "\n";
 }
 
 };  // namespace bolo
