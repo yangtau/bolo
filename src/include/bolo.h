@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "backup_file.h"
+#include "libfswatch/c++/monitor.hpp"
 #include "result.h"
 #include "types.h"
 #include "util.h"
@@ -14,9 +15,6 @@ namespace fs = std::filesystem;
 
 class Bolo {
  public:
-  Bolo(const Bolo &) = delete;
-  Bolo(Bolo &&) = default;
-
   // Input:
   //   path: json config 配置路径
   // Returns bolo: Result<Bolo> on success;
@@ -44,26 +42,27 @@ class Bolo {
     return Nothing;
   }
 
+  void SetMonitor(std::shared_ptr<fsw::monitor> monitor) { fs_monitor_ = monitor; }
+
  private:
-  template <typename Json, typename BackupFileMap>
-  Bolo(const std::string &config_path, Json &&config, BackupFileMap &&m, BackupFileId next_id,
-       const std::string &backup_dir)
-      : config_file_path_{config_path},
-        config_(std::forward<Json>(config)),
-        backup_files_(std::forward<BackupFileMap>(m)),
-        next_id_(next_id),
-        backup_dir_{backup_dir} {}
+  Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
+       const std::string &backup_dir);
 
   // 更新配置文件:
   //     备份文件列表更新, 或者其他配置信息更新; 配置更新后, 必须将配置持久化成功后才返回 true
   Insidious<std::string> UpdateConfig();
   Insidious<std::string> BackupImpl(BackupFile &file, const std::string &key);
   BackupFileId NextId() { return next_id_++; }
+  void MonitorCallback(const std::vector<fsw::event> &events);
+  void UpdateMonitor(std::shared_ptr<std::thread> join);
 
   PropertyWithGetter(fs::path, config_file_path);  // 配置文件路径
   PropertyWithGetter(json, config);                // 配置
   PropertyWithGetter(BackupList, backup_files);    // 备份文件列表
   PropertyWithGetter(BackupFileId, next_id);       // 下一个备份文件 id
   PropertyWithGetter(fs::path, backup_dir);        // 备份文件夹路径
+
+  std::shared_ptr<fsw::monitor> fs_monitor_;
+  std::shared_ptr<std::thread> thread_;
 };
 };  // namespace bolo

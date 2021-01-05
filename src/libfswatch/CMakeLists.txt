@@ -15,6 +15,8 @@
 #
 include_directories(src/libfswatch)
 
+add_definitions(-DHAVE_CXX_MUTEX)
+
 set(LIB_SOURCE_FILES
         src/libfswatch/c/cevent.cpp
         src/libfswatch/c/cevent.h

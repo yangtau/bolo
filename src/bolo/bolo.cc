@@ -1,10 +1,17 @@
 #include "bolo.h"
 
+#include <algorithm>
 #include <fstream>
-#include <string>
+#include <functional>
+#include <memory>
+#include <thread>
+#include <unordered_set>
 
 #include "compress.h"
 #include "crypto.h"
+#include "libfswatch/c++/libfswatch_exception.hpp"
+#include "libfswatch/c++/monitor.hpp"
+#include "libfswatch/c++/monitor_factory.hpp"
 #include "tar.h"
 #include "util.h"
 
@@ -12,33 +19,22 @@ namespace bolo {
 using namespace std::string_literals;
 
 Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path &path) try {
+  json config;
+
+  // read config
   std::ifstream f(path);
   if (!f.is_open()) {
     return Err("failed to open " + path.string());
   }
+  f >> config;
 
-  json config;
-  try {
-    f >> config;
-  } catch (const json::parse_error &e) {
-    return Err("json parse_error: "s + e.what());
-  }
+  // parse config
+  auto next_id = config.at("next_id").get<BackupFileId>();
+  auto list = config.at("backup_list").get<BackupList>();
+  fs::path backup_dir = config.at("backup_dir").get<std::string>();
+  backup_dir = backup_dir.lexically_normal();
 
-  BackupFileId next_id;
-  BackupList list;
-  fs::path backup_dir;
-
-  try {
-    config.at("next_id").get_to(next_id);
-    config.at("backup_list").get_to(list);
-    backup_dir = config.at("backup_dir").get<std::string>();
-    backup_dir = backup_dir.lexically_normal();
-  } catch (const json::out_of_range &e) {
-    return Err("json out_of_range: "s + e.what());
-  } catch (const json::type_error &e) {
-    return Err("json type_error: "s + e.what());
-  }
-
+  // create and check backup_dir
   fs::create_directories(backup_dir);
   // if backup_path exists
   if (fs::exists(backup_dir)) {
@@ -48,9 +44,88 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
   } else {
     return Err("failed to create backup directory: "s + backup_dir.string());
   }
-  return Ok(std::unique_ptr<Bolo>(new Bolo(path, config, list, next_id, backup_dir)));
+
+  return Ok(std::unique_ptr<Bolo>(
+      new Bolo(path, std::move(config), std::move(list), next_id, backup_dir)));
 } catch (const fs::filesystem_error &e) {
   return Err("filesystem error: "s + e.what());
+} catch (const json::out_of_range &e) {
+  return Err("json out_of_range: "s + e.what());
+} catch (const json::type_error &e) {
+  return Err("json type_error: "s + e.what());
+}
+
+Bolo::Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
+           const std::string &backup_dir)
+    : config_file_path_{config_path},
+      config_{std::move(config)},
+      backup_files_{std::move(m)},
+      next_id_{next_id},
+      backup_dir_{backup_dir},
+      fs_monitor_{nullptr} {
+  thread_ = std::make_shared<std::thread>([this](auto t) { this->UpdateMonitor(t); }, nullptr);
+}
+
+void Bolo::UpdateMonitor(std::shared_ptr<std::thread> join) try {
+  // stop monitor
+  if (fs_monitor_ != nullptr) {
+    fs_monitor_->stop();
+    if (join != nullptr && join->joinable()) join->join();
+  }
+
+  std::vector<std::string> paths;
+  for (auto &it : backup_files_) {
+    paths.push_back(it.second.path);
+  }
+
+  // create a new monitor
+  fs_monitor_ = std::shared_ptr<fsw::monitor>(fsw::monitor_factory::create_monitor(
+      ::system_default_monitor_type, paths,
+      [](const std::vector<fsw::event> &e, void *_bolo) {
+        Bolo *bolo = static_cast<Bolo *>(_bolo);
+        bolo->MonitorCallback(e);
+      },    // callback
+      this  // context
+      ));
+  fs_monitor_->set_recursive(true);
+  fs_monitor_->set_latency(5);
+  fs_monitor_->set_allow_overflow(false);
+  fs_monitor_->set_event_type_filters({
+      {fsw_event_flag::Created},
+      {fsw_event_flag::Updated},
+      {fsw_event_flag::Renamed},
+      {fsw_event_flag::Removed},
+      {fsw_event_flag::MovedTo},
+  });
+  fs_monitor_->start();
+
+} catch (const fsw::libfsw_exception &e) {
+  Log(LogLevel::Error, "libfsw error: "s + e.what());
+} catch (const std::system_error &e) {
+  Log(LogLevel::Error, "system error: failed to create threads, "s + e.what());
+}
+
+void Bolo::MonitorCallback(const std::vector<fsw::event> &events) try {
+  std::unordered_set<std::string> visited;
+
+  for (auto &it : backup_files_) {
+    auto path = fs::path(it.second.path).lexically_normal().relative_path();
+    if (visited.count(path.string()) > 0 || it.second.is_encrypted) continue;
+    visited.insert(path.string());
+
+    for (const auto &e : events) {
+      auto e_path = fs::path(e.get_path()).lexically_normal().relative_path();
+      if (e_path.string().find(path.string()) != std::string::npos) {
+        if (auto ins = Update(it.second.id)) {
+          Log(LogLevel::Error, "monitor update error: " + ins.error());
+        }
+        Log(LogLevel::Info, "fsw_monitor: "s + it.second.path);
+        break;
+      }
+    }
+  }
+} catch (const fs::filesystem_error &e) {
+  Log(LogLevel::Error, "fs error: "s + e.what());
 }
 
 Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compressed,
@@ -135,8 +210,12 @@ Insidious<std::string> Bolo::BackupImpl(BackupFile &f, const std::string &key) {
     // TODO
   }
 
+  // remove the old file
+  if (fs::exists(f.backup_path)) fs::remove(f.backup_path);
+
   // rename temp
-  fs::rename(temp, f.backup_path);
+  // cannot use rename: Invalid cross-device link
+  fs::copy(temp, f.backup_path);
   return Safe;
 }
 
@@ -251,6 +330,8 @@ Insidious<std::string> Bolo::UpdateConfig() {
     return Danger("json type_error: "s + e.what());
   }
 
+  thread_ = std::make_shared<std::thread>([this](auto t) { this->UpdateMonitor(t); }, thread_);
+
   std::ofstream f(config_file_path_);
   if (!f.is_open()) return Danger("failed to open config file: "s + config_file_path_.string());
 
@@ -258,5 +339,4 @@ Insidious<std::string> Bolo::UpdateConfig() {
   if (!f.good()) return Danger("failed to write to config file: "s + config_file_path_.string());
   return Safe;
 }
-
 };  // namespace bolo
