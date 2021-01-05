@@ -1,2 +1,5 @@
 add_library(bolo STATIC bolo.cc)
-target_link_libraries(bolo tar compress crypto libfswatch)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+target_link_libraries(bolo tar compress crypto libfswatch Threads::Threads)
