@@ -146,6 +146,7 @@ void MainWindow::Show_FileWindow() {
 }
 
 void MainWindow::Add_NewFile(QString file_path) {
+  // 可选项选择
   QMessageBox set_box(QMessageBox::NoIcon, "选项", "", 0, NULL, Qt::Sheet);
   set_box.setStyleSheet("background-color:white");
 
@@ -168,32 +169,52 @@ void MainWindow::Add_NewFile(QString file_path) {
 
   bool is_compress = option_compress.checkState();
   bool is_encrypt = option_encrypt.checkState();
-  // bool is_cloud = option_cloud.checkState();
+  bool is_cloud = option_cloud.checkState();
 
-  if (set_box.clickedButton() == option_ok) {
-    // 虚拟进度条读条
-    set_progressbar();
-
-    auto res = mybolo->Backup(file_path.toStdString(), is_compress, is_encrypt);
-
-    if (!res) {
-      std::cerr << res.error();
-      return;
-    }
-
-    ItemData my_itemdata;
-    my_itemdata.file_name = QString::fromStdString(res.value().filename);
-    my_itemdata.MyBackupFile = res.value();
-
-    QStandardItem *item = new QStandardItem;
-    item->setSizeHint(QSize(100, 120));
-    item->setData(QVariant::fromValue(my_itemdata), Qt::UserRole);
-    item->setToolTip(my_itemdata.file_name);
-    standard_item_model->appendRow(item);
+  // 取消新增
+  if (set_box.clickedButton() != option_ok) {
+    set_box.close();
+    return;
   }
 
-  else
-    set_box.close();
+  // 有加密需求
+  if (is_encrypt) {
+    password_window.exec();
+    if (password_window.clickedButton() == password_window.option_cancel) {
+      password_window.password.setText("");
+      return;
+    }
+    if (password_window.clickedButton() == password_window.option_ok &&
+        password_window.password.text().size() == 0) {
+      QMessageBox::critical(NULL, "错误", "密码不能为空", QMessageBox::Yes, QMessageBox::Yes);
+      return;
+    }
+  }
+
+  // 虚拟进度条读条
+  set_progressbar();
+
+  auto res = mybolo->Backup(file_path.toStdString(), is_compress, is_encrypt, is_cloud,
+                            password_window.password.text().toStdString());
+
+  if (!res) {
+    std::cerr << res.error();
+    return;
+  }
+
+  // 添加新文件
+  ItemData my_itemdata;
+  my_itemdata.file_name = QString::fromStdString(res.value().filename);
+  my_itemdata.MyBackupFile = res.value();
+
+  QStandardItem *item = new QStandardItem;
+  item->setSizeHint(QSize(100, 120));
+  item->setData(QVariant::fromValue(my_itemdata), Qt::UserRole);
+  item->setToolTip(my_itemdata.file_name);
+  standard_item_model->appendRow(item);
+
+  // 清空密码框内容
+  password_window.password.setText("");
 }
 
 void MainWindow::Show_FileDetail(const QModelIndex &index) {
@@ -210,6 +231,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
            QString::fromStdString(bolo::TimestampToString(data.MyBackupFile.timestamp)) + "\n";
   detail = detail + "是否压缩：" + (data.MyBackupFile.is_compressed ? "是" : "否") + "\n";
   detail = detail + "是否加密：" + (data.MyBackupFile.is_encrypted ? "是" : "否") + "\n";
+  detail = detail + "是否云备份：" + (data.MyBackupFile.is_in_cloud ? "是" : "否") + "\n";
 
   // set the detail box
   QMessageBox file_detail(QMessageBox::NoIcon, "File Detail", detail, 0, NULL);
@@ -227,6 +249,13 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
   file_detail.exec();
   if (file_detail.clickedButton() == restore_button) {
     // 恢复备份操作
+    if (data.MyBackupFile.is_encrypted) {
+      password_window.exec();
+      if (password_window.clickedButton() == password_window.option_cancel) {
+        password_window.password.setText("");
+        return;
+      }
+    }
     // 设置并显示文件列表
     file_window.setWindowTitle("本地文件");
     file_window.setAcceptMode(QFileDialog::AcceptOpen);
@@ -240,16 +269,27 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
       set_progressbar();
 
       QStringList file_names = file_window.selectedFiles();
-      auto res = mybolo->Restore(data.MyBackupFile.id, file_names[0].toStdString());
+      auto res = mybolo->Restore(data.MyBackupFile.id, file_names[0].toStdString(),
+                                 password_window.password.text().toStdString());
+      password_window.password.setText("");
 
       // 输出错误信息
       if (res) std::cerr << res.error() << std::endl;
     }
   } else if (file_detail.clickedButton() == update_button) {
     // 更新备份
+    if (data.MyBackupFile.is_encrypted) {
+      password_window.exec();
+      if (password_window.clickedButton() == password_window.option_cancel) {
+        password_window.password.setText("");
+        return;
+      }
+    }
     // 虚拟进度条读条
     set_progressbar();
-    auto res = mybolo->Update(data.MyBackupFile.id);
+    auto res = mybolo->Update(data.MyBackupFile.id, password_window.password.text().toStdString());
+    password_window.password.setText("");
+
     // 输出错误信息
     if (res) std::cerr << res.error() << std::endl;
   } else if (file_detail.clickedButton() == delete_button) {

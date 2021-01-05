@@ -7,7 +7,7 @@ set(CMAKE_AUTOUIC ON)
 set(QRC_FILE res.qrc)
 
 qt5_add_resources(QRC ${QRC_FILE})
-add_executable(app main.cc mainwindow.cc itemdelegate.cc listview.cc ${QRC})
+add_executable(app main.cc mainwindow.cc itemdelegate.cc listview.cc password.cc ${QRC})
 
 target_link_libraries(app PUBLIC
                       Qt5::Widgets 

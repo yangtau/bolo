@@ -7,16 +7,17 @@
 #include <QLabel>
 #include <QListView>
 #include <QMainWindow>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <memory>
-#include <QProgressBar>
 
 #include "bolo.h"
 #include "itemdelegate.h"
 #include "listview.h"
+#include "password.h"
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -37,6 +38,7 @@ class MainWindow : public QMainWindow {
   QLabel title;
   QFileDialog file_window;
   QProgressBar progressbar;
+  PassWord password_window;
 
   void set_progressbar();
 

@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
     return a.exec();
   } else {
     // 生成失败，输出错误信息
-    std::cerr << res.error();
+    std::cerr << res.error() << std::endl;
     return 0;
   }
 }
