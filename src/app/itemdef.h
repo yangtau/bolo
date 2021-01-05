@@ -6,8 +6,8 @@
 #include "bolo.h"
 
 struct ItemData {
+  bolo::BackupFileId id;
   QString file_name;
-  bolo::BackupFile MyBackupFile;
 };
 
 Q_DECLARE_METATYPE(ItemData)

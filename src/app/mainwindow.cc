@@ -90,7 +90,7 @@ void MainWindow::InitData() {
     // 获取文件属性
     ItemData my_itemdata;
     my_itemdata.file_name = QString::fromStdString(it.second.filename);
-    my_itemdata.MyBackupFile = it.second;
+    my_itemdata.id = it.second.id;
 
     // 添加至管理结构
     QStandardItem *item = new QStandardItem;
@@ -204,8 +204,8 @@ void MainWindow::Add_NewFile(QString file_path) {
 
   // 添加新文件
   ItemData my_itemdata;
+  my_itemdata.id = res.value().id;
   my_itemdata.file_name = QString::fromStdString(res.value().filename);
-  my_itemdata.MyBackupFile = res.value();
 
   QStandardItem *item = new QStandardItem;
   item->setSizeHint(QSize(100, 120));
@@ -221,17 +221,20 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
   // 获取item存储的数据
   QVariant variant = index.data(Qt::UserRole);
   ItemData data = variant.value<ItemData>();
+  auto file = mybolo->GetBackupFile(data.id);
+  if (!file) return;
+  auto open_backupfile = file.value();
 
   // set the detail text
   QString detail = "";
-  detail = detail + "备份文件：" + QString::fromStdString(data.MyBackupFile.filename) + "\n";
-  detail = detail + "初始目录：" + QString::fromStdString(data.MyBackupFile.path) + "\n";
-  detail = detail + "备份目录：" + QString::fromStdString(data.MyBackupFile.backup_path) + "\n";
+  detail = detail + "备份文件：" + QString::fromStdString(open_backupfile.filename) + "\n";
+  detail = detail + "初始目录：" + QString::fromStdString(open_backupfile.path) + "\n";
+  detail = detail + "备份目录：" + QString::fromStdString(open_backupfile.backup_path) + "\n";
   detail = detail + "备份时间：" +
-           QString::fromStdString(bolo::TimestampToString(data.MyBackupFile.timestamp)) + "\n";
-  detail = detail + "是否压缩：" + (data.MyBackupFile.is_compressed ? "是" : "否") + "\n";
-  detail = detail + "是否加密：" + (data.MyBackupFile.is_encrypted ? "是" : "否") + "\n";
-  detail = detail + "是否云备份：" + (data.MyBackupFile.is_in_cloud ? "是" : "否") + "\n";
+           QString::fromStdString(bolo::TimestampToString(open_backupfile.timestamp)) + "\n";
+  detail = detail + "是否压缩：" + (open_backupfile.is_compressed ? "是" : "否") + "\n";
+  detail = detail + "是否加密：" + (open_backupfile.is_encrypted ? "是" : "否") + "\n";
+  detail = detail + "是否云备份：" + (open_backupfile.is_in_cloud ? "是" : "否") + "\n";
 
   // set the detail box
   QMessageBox file_detail(QMessageBox::NoIcon, "File Detail", detail, 0, NULL);
@@ -249,7 +252,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
   file_detail.exec();
   if (file_detail.clickedButton() == restore_button) {
     // 恢复备份操作
-    if (data.MyBackupFile.is_encrypted) {
+    if (open_backupfile.is_encrypted) {
       password_window.exec();
       if (password_window.clickedButton() == password_window.option_cancel) {
         password_window.password.setText("");
@@ -269,7 +272,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
       set_progressbar();
 
       QStringList file_names = file_window.selectedFiles();
-      auto res = mybolo->Restore(data.MyBackupFile.id, file_names[0].toStdString(),
+      auto res = mybolo->Restore(open_backupfile.id, file_names[0].toStdString(),
                                  password_window.password.text().toStdString());
       password_window.password.setText("");
 
@@ -278,7 +281,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
     }
   } else if (file_detail.clickedButton() == update_button) {
     // 更新备份
-    if (data.MyBackupFile.is_encrypted) {
+    if (open_backupfile.is_encrypted) {
       password_window.exec();
       if (password_window.clickedButton() == password_window.option_cancel) {
         password_window.password.setText("");
@@ -287,7 +290,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
     }
     // 虚拟进度条读条
     set_progressbar();
-    auto res = mybolo->Update(data.MyBackupFile.id, password_window.password.text().toStdString());
+    auto res = mybolo->Update(open_backupfile.id, password_window.password.text().toStdString());
     password_window.password.setText("");
 
     // 输出错误信息
@@ -303,7 +306,7 @@ void MainWindow::Show_FileDetail(const QModelIndex &index) {
       // 执行删除操作
       // 虚拟进度条读条
       set_progressbar();
-      auto res = mybolo->Remove(data.MyBackupFile.id);
+      auto res = mybolo->Remove(open_backupfile.id);
       if (res)
         // 输出错误信息
         std::cerr << res.error() << std::endl;
