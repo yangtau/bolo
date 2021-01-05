@@ -1,9 +1,9 @@
 #pragma once
 #include <filesystem>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
-#include <thread>
 
 #include "backup_file.h"
 #include "libfswatch/c++/monitor.hpp"
@@ -47,7 +47,7 @@ class Bolo {
 
  private:
   Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
-       const std::string &backup_dir);
+       const std::string &backup_dir, bool enable_auto_update);
 
   // 更新配置文件:
   //     备份文件列表更新, 或者其他配置信息更新; 配置更新后, 必须将配置持久化成功后才返回 true
@@ -65,5 +65,6 @@ class Bolo {
 
   std::shared_ptr<fsw::monitor> fs_monitor_;
   std::shared_ptr<std::thread> thread_;
+  bool enable_auto_update_;
 };
 };  // namespace bolo

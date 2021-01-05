@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <fstream>
-#include <functional>
 #include <memory>
 #include <thread>
 #include <unordered_set>
@@ -31,6 +30,7 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
   // parse config
   auto next_id = config.at("next_id").get<BackupFileId>();
   auto list = config.at("backup_list").get<BackupList>();
+  auto enable_auto_update = config.at("enable_auto_update").get<bool>();
   fs::path backup_dir = config.at("backup_dir").get<std::string>();
   backup_dir = backup_dir.lexically_normal();
 
@@ -46,7 +46,7 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
   }
 
   return Ok(std::unique_ptr<Bolo>(
-      new Bolo(path, std::move(config), std::move(list), next_id, backup_dir)));
+      new Bolo(path, std::move(config), std::move(list), next_id, backup_dir, enable_auto_update)));
 } catch (const fs::filesystem_error &e) {
   return Err("filesystem error: "s + e.what());
 } catch (const json::out_of_range &e) {
@@ -56,14 +56,16 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
 }
 
 Bolo::Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
-           const std::string &backup_dir)
+           const std::string &backup_dir, bool enable_auto_update)
     : config_file_path_{config_path},
       config_{std::move(config)},
       backup_files_{std::move(m)},
       next_id_{next_id},
       backup_dir_{backup_dir},
-      fs_monitor_{nullptr} {
-  thread_ = std::make_shared<std::thread>([this](auto t) { this->UpdateMonitor(t); }, nullptr);
+      fs_monitor_{nullptr},
+      enable_auto_update_{enable_auto_update} {
+  if (enable_auto_update_)
+    thread_ = std::make_shared<std::thread>([this](auto t) { this->UpdateMonitor(t); }, nullptr);
 }
 
 void Bolo::UpdateMonitor(std::shared_ptr<std::thread> join) try {
@@ -330,7 +332,8 @@ Insidious<std::string> Bolo::UpdateConfig() {
     return Danger("json type_error: "s + e.what());
   }
 
-  thread_ = std::make_shared<std::thread>([this](auto t) { this->UpdateMonitor(t); }, thread_);
+  if (enable_auto_update_)
+    thread_ = std::make_shared<std::thread>([this](auto t) { this->UpdateMonitor(t); }, thread_);
 
   std::ofstream f(config_file_path_);
   if (!f.is_open()) return Danger("failed to open config file: "s + config_file_path_.string());

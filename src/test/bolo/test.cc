@@ -84,10 +84,10 @@ TEST_CASE("Bolo", "test") {
 
   REQUIRE(CreateFiles());
   REQUIRE(
-      CreateConfigFile("{ \"backup_list\": [], \"next_id\": 0,\"backup_dir\":\"backup_path/\" }"));
+      CreateConfigFile("{ \"backup_list\": [], \"next_id\": "
+                       "0,\"backup_dir\":\"backup_path/\", \"enable_auto_update\": false }"));
 
   std::unordered_map<BackupFileId, std::string> keys;
-
   {
     // load
     auto bolo_res = Bolo::LoadFromJsonFile(config_path);

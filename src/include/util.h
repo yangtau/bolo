@@ -47,6 +47,7 @@ inline std::string MakeTemp() {
   using namespace std::string_literals;
   static int temp_id = 0;
   auto path = std::filesystem::temp_directory_path() / ("bolo_num_"s + std::to_string(temp_id++));
+  if (std::filesystem::exists(path)) std::filesystem::remove(path);
   return path.string();
 }
 
