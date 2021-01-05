@@ -101,7 +101,7 @@ TEST_CASE("Bolo", "test") {
 
     // backup
     for (auto &[origin, compressed, encrypted, key] : cases) {
-      auto res = b->Backup(origin, compressed, encrypted, key);
+      auto res = b->Backup(origin, compressed, encrypted, false, key);
       if (!res) std::cout << res.error() << std::endl;
       REQUIRE(!!(res));
       auto f = res.value();
