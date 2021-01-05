@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <thread>
 
 #include "backup_file.h"
 #include "libfswatch/c++/monitor.hpp"
