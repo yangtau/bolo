@@ -34,6 +34,9 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
   fs::path backup_dir = config.at("backup_dir").get<std::string>();
   backup_dir = backup_dir.lexically_normal();
 
+  fs::path cloud_path = config.at("cloud_mount_path").get<std::string>();
+  cloud_path = cloud_path.lexically_normal();
+
   // create and check backup_dir
   fs::create_directories(backup_dir);
   // if backup_path exists
@@ -45,8 +48,8 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
     return Err("failed to create backup directory: "s + backup_dir.string());
   }
 
-  return Ok(std::unique_ptr<Bolo>(
-      new Bolo(path, std::move(config), std::move(list), next_id, backup_dir, enable_auto_update)));
+  return Ok(std::unique_ptr<Bolo>(new Bolo(path, std::move(config), std::move(list), next_id,
+                                           backup_dir, cloud_path, enable_auto_update)));
 } catch (const fs::filesystem_error &e) {
   return Err("filesystem error: "s + e.what());
 } catch (const json::out_of_range &e) {
@@ -55,13 +58,14 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
   return Err("json type_error: "s + e.what());
 }
 
-Bolo::Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
-           const std::string &backup_dir, bool enable_auto_update)
+Bolo::Bolo(const fs::path &config_path, json &&config, BackupList &&m, BackupFileId next_id,
+           const fs::path &backup_dir, const fs::path &cloud_path, bool enable_auto_update)
     : config_file_path_{config_path},
-      config_{std::move(config)},
+      config_(std::move(config)),
       backup_files_{std::move(m)},
       next_id_{next_id},
       backup_dir_{backup_dir},
+      cloud_path_{cloud_path},
       fs_monitor_{nullptr},
       enable_auto_update_{enable_auto_update} {
   if (enable_auto_update_)
@@ -90,7 +94,7 @@ void Bolo::UpdateMonitor(std::shared_ptr<std::thread> join) try {
       this  // context
       ));
   fs_monitor_->set_recursive(true);
-  fs_monitor_->set_latency(5);
+  fs_monitor_->set_latency(1);
   fs_monitor_->set_allow_overflow(false);
   fs_monitor_->set_event_type_filters({
       {fsw_event_flag::Created},
@@ -140,7 +144,7 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
   std::string filename = p.lexically_relative(p.parent_path());
 
   // backup filename = filename + id
-  auto backup_path = (backup_dir_ / (filename + std::to_string(id)));
+  auto backup_path = ((enable_cloud ? cloud_path_ : backup_dir_) / (std::to_string(id) + filename));
 
   auto file = BackupFile{
       id, filename, p, backup_path, GetTimestamp(), is_compressed, is_encrypted, enable_cloud,
@@ -163,7 +167,7 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
 
 clean:
   backup_files_.erase(file.id);
-  fs::remove(file.backup_path);
+  fs::remove_all(file.backup_path);
   return Err(err);
 } catch (const fs::filesystem_error &e) {
   return Err("filesystem error: "s + e.what());
@@ -171,53 +175,61 @@ clean:
 
 // `f` has already being inserted into config
 Insidious<std::string> Bolo::BackupImpl(BackupFile &f, const std::string &key) {
-  auto temp = MakeTemp();
-  if (auto tar = bolo_tar::Tar::Open(temp)) {
-    if (auto res = tar.value()->Append(f.path)) return Danger("tar error: "s + res.error());
-  } else {
-    return Danger(tar.error());
-  }
+  auto temp = f.path;
 
-  if (f.is_compressed) {
-    auto t = MakeTemp();
-    std::ifstream ifs(temp, std::ios_base::binary);
-    if (!ifs.good()) return Danger("failded to open "s + temp);
-    std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
-    if (!ofs.good()) return Danger("failded to open "s + t);
+  if (f.is_compressed || f.is_encrypted) {
+    temp = MakeTemp();
+    if (auto tar = bolo_tar::Tar::Open(temp)) {
+      if (auto res = tar.value()->Append(f.path)) return Danger("tar error: "s + res.error());
+    } else {
+      return Danger(tar.error());
+    }
 
-    if (auto ins = bolo_compress::Compress(ifs, ofs, bolo_compress::Scheme::DEFLATE))
-      return Danger("compression error: "s + ins.error());
+    if (f.is_compressed) {
+      auto t = MakeTemp();
+      std::ifstream ifs(temp, std::ios_base::binary);
+      if (!ifs.good()) return Danger("failded to open "s + temp);
+      std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
+      if (!ofs.good()) return Danger("failded to open "s + t);
 
-    // update temp
-    temp = t;
-  }
+      if (auto ins = bolo_compress::Compress(ifs, ofs, bolo_compress::Scheme::DEFLATE))
+        return Danger("compression error: "s + ins.error());
 
-  if (f.is_encrypted) {
-    if (key == "") return Danger("the file is encrypted, but the key is empty"s);
+      // update temp
+      temp = t;
+    }
 
-    auto t = MakeTemp();
-    std::ifstream ifs(temp, std::ios_base::binary);
-    if (!ifs.good()) return Danger("failded to open "s + temp);
-    std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
-    if (!ofs.good()) return Danger("failded to open "s + t);
+    if (f.is_encrypted) {
+      if (key == "") return Danger("the file is encrypted, but the key is empty"s);
 
-    if (auto ins = bolo_crypto::Encrypt(ifs, ofs, key))
-      return Danger("encrypt error: "s + ins.error());
+      auto t = MakeTemp();
+      std::ifstream ifs(temp, std::ios_base::binary);
+      if (!ifs.good()) return Danger("failded to open "s + temp);
+      std::ofstream ofs(t, std::ios_base::binary | std::ios_base::trunc);
+      if (!ofs.good()) return Danger("failded to open "s + t);
 
-    // update temp
-    temp = t;
-  }
+      if (auto ins = bolo_crypto::Encrypt(ifs, ofs, key))
+        return Danger("encrypt error: "s + ins.error());
 
-  if (f.is_in_cloud) {
-    // TODO
+      // update temp
+      temp = t;
+    }
   }
 
   // remove the old file
-  if (fs::exists(f.backup_path)) fs::remove(f.backup_path);
+  // if (fs::exists(f.backup_path)) fs::remove_all(f.backup_path);
 
   // rename temp
   // cannot use rename: Invalid cross-device link
-  fs::copy(temp, f.backup_path);
+  std::thread([f, temp]() {
+    try {
+      fs::copy(temp, f.backup_path,
+               fs::copy_options::update_existing | fs::copy_options::recursive);
+    } catch (const fs::filesystem_error &e) {
+      Log(LogLevel::Error, "copy error: "s + e.what());
+    }
+  }).detach();
+  // fs::copy(temp, f.backup_path, fs::copy_options::update_existing | fs::copy_options::recursive);
   return Safe;
 }
 
@@ -228,7 +240,7 @@ Insidious<std::string> Bolo::Remove(BackupFileId id) try {
 
   auto file = backup_files_[id];
 
-  fs::remove(file.backup_path);
+  fs::remove_all(file.backup_path);
 
   backup_files_.erase(id);
 
@@ -312,12 +324,15 @@ Insidious<std::string> Bolo::Restore(BackupFileId id, const fs::path &restore_di
     temp = t;
   }
 
-  if (auto tar = Tar::Open(temp)) {
-    if (auto res = tar.value()->Extract(restore_dir)) return Danger("tar error: "s + res.error());
+  if (file.is_compressed || file.is_encrypted) {
+    if (auto tar = Tar::Open(temp)) {
+      if (auto res = tar.value()->Extract(restore_dir)) return Danger("tar error: "s + res.error());
+    } else {
+      return Danger("tar error: "s + tar.error());
+    }
   } else {
-    return Danger("tar error: "s + tar.error());
+    fs::copy(temp, restore_path, fs::copy_options::update_existing | fs::copy_options::recursive);
   }
-
   return Safe;
 } catch (const fs::filesystem_error &e) {
   return Danger("filesystem error: "s + e.what());
@@ -327,7 +342,6 @@ Insidious<std::string> Bolo::UpdateConfig() {
   try {
     config_["next_id"] = next_id_;
     config_["backup_list"] = json(backup_files_);
-    config_["backup_dir"] = backup_dir_.string();
   } catch (const json::type_error &e) {
     return Danger("json type_error: "s + e.what());
   }

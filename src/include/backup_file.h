@@ -17,14 +17,12 @@ struct BackupFile {
   bool is_in_cloud;         // 是否云备份
 
   bool operator==(const BackupFile &f) const {
-    return id == f.id && path == f.path && backup_path == f.backup_path &&
-           timestamp == f.timestamp && is_compressed == f.is_compressed &&
-           is_encrypted == f.is_encrypted;
+    return id == f.id;
   }
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BackupFile, id, filename, path, backup_path, timestamp,
-                                   is_compressed, is_encrypted);
+                                   is_compressed, is_encrypted, is_in_cloud);
 
 using BackupList = std::unordered_map<std::uint64_t, BackupFile>;
 

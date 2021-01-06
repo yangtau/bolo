@@ -46,8 +46,9 @@ class Bolo {
   void SetMonitor(std::shared_ptr<fsw::monitor> monitor) { fs_monitor_ = monitor; }
 
  private:
-  Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
-       const std::string &backup_dir, bool enable_auto_update);
+  Bolo(const fs::path &config_path, json &&config, BackupList &&m, BackupFileId next_id,
+       const fs::path &backup_dir, const fs::path &cloud_path,
+       bool enable_auto_update);
 
   // 更新配置文件:
   //     备份文件列表更新, 或者其他配置信息更新; 配置更新后, 必须将配置持久化成功后才返回 true
@@ -62,6 +63,7 @@ class Bolo {
   PropertyWithGetter(BackupList, backup_files);    // 备份文件列表
   PropertyWithGetter(BackupFileId, next_id);       // 下一个备份文件 id
   PropertyWithGetter(fs::path, backup_dir);        // 备份文件夹路径
+  PropertyWithGetter(fs::path, cloud_path);        // cloud backup path
 
   std::shared_ptr<fsw::monitor> fs_monitor_;
   std::shared_ptr<std::thread> thread_;
