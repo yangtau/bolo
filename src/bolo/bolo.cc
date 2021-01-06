@@ -94,7 +94,7 @@ void Bolo::UpdateMonitor(std::shared_ptr<std::thread> join) try {
       this  // context
       ));
   fs_monitor_->set_recursive(true);
-  fs_monitor_->set_latency(5);
+  fs_monitor_->set_latency(1);
   fs_monitor_->set_allow_overflow(false);
   fs_monitor_->set_event_type_filters({
       {fsw_event_flag::Created},
@@ -167,7 +167,7 @@ Result<BackupFile, std::string> Bolo::Backup(const fs::path &path, bool is_compr
 
 clean:
   backup_files_.erase(file.id);
-  fs::remove(file.backup_path);
+  fs::remove_all(file.backup_path);
   return Err(err);
 } catch (const fs::filesystem_error &e) {
   return Err("filesystem error: "s + e.what());
@@ -217,7 +217,7 @@ Insidious<std::string> Bolo::BackupImpl(BackupFile &f, const std::string &key) {
   }
 
   // remove the old file
-  if (fs::exists(f.backup_path)) fs::remove(f.backup_path);
+  // if (fs::exists(f.backup_path)) fs::remove_all(f.backup_path);
 
   // rename temp
   // cannot use rename: Invalid cross-device link
@@ -240,7 +240,7 @@ Insidious<std::string> Bolo::Remove(BackupFileId id) try {
 
   auto file = backup_files_[id];
 
-  fs::remove(file.backup_path);
+  fs::remove_all(file.backup_path);
 
   backup_files_.erase(id);
 
