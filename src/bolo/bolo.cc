@@ -58,7 +58,7 @@ Result<std::unique_ptr<Bolo>, std::string> Bolo::LoadFromJsonFile(const fs::path
 Bolo::Bolo(const std::string &config_path, json &&config, BackupList &&m, BackupFileId next_id,
            const std::string &backup_dir, bool enable_auto_update)
     : config_file_path_{config_path},
-      config_{std::move(config)},
+      config_(std::move(config)),
       backup_files_{std::move(m)},
       next_id_{next_id},
       backup_dir_{backup_dir},
@@ -327,7 +327,6 @@ Insidious<std::string> Bolo::UpdateConfig() {
   try {
     config_["next_id"] = next_id_;
     config_["backup_list"] = json(backup_files_);
-    config_["backup_dir"] = backup_dir_.string();
   } catch (const json::type_error &e) {
     return Danger("json type_error: "s + e.what());
   }
