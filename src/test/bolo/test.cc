@@ -85,7 +85,8 @@ TEST_CASE("Bolo", "test") {
   REQUIRE(CreateFiles());
   REQUIRE(
       CreateConfigFile("{ \"backup_list\": [], \"next_id\": "
-                       "0,\"backup_dir\":\"backup_path/\", \"enable_auto_update\": false }"));
+                       "0,\"backup_dir\":\"backup_path/\", \"enable_auto_update\": false, "
+                       "\"cloud_mount_path\":\"backup_path/\" }"));
 
   std::unordered_map<BackupFileId, std::string> keys;
   {
